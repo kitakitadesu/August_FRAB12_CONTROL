@@ -62,3 +62,12 @@ jobs:
     - name: Build firmware
       working-directory: ./LOW_LEVEL/
       run: pio run
+    - name: Firmware artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: Pi Pico Firmware
+        path: |
+          ./LOW_LEVEL/.pio/build/pico/firmware.uf2
+          ./LOW_LEVEL/.pio/build/pico/firmware.elf
+          ./LOW_LEVEL/.pio/build/pico/firmware.bin
+
