@@ -55,9 +55,9 @@ jobs:
         python3 -m pipx ensurepath
         python3 -V
         mkdir -p /usr/local/bin
-        ln -s /root/.platformio/penv/bin/platformio /usr/local/bin/platformio
-        ln -s /root/.platformio/penv/bin/pio /usr/local/bin/pio
-        ln -s /root/.platformio/penv/bin/piodebuggdb /usr/local/bin/piodebuggdb
+        ln -s /home/runner/.platformio/penv/bin/platformio /usr/local/bin/platformio
+        ln -s /home/runner/.platformio/penv/bin/pio /usr/local/bin/pio
+        ln -s /home/runner/.platformio/penv/bin/piodebuggdb /usr/local/bin/piodebuggdb
         pio platform install raspberrypi
     - name: Build firmware
       run: pio run
