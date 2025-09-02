@@ -52,7 +52,7 @@ jobs:
       env:
         PLATFORMIO_BUILD_CACHE_DIR: /home/runner/.piocache/
       run: |
-        mkdir $PLATFORMIO_BUILD_CACHE_DIR
+        mkdir -p $PLATFORMIO_BUILD_CACHE_DIR
         pio run
     - name: Firmware artifacts
       uses: actions/upload-artifact@v4
