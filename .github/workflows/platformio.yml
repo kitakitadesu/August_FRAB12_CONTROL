@@ -36,7 +36,9 @@ jobs:
       with:
         path: |
           /home/runner/.platformio
-        key: ${{ hashFiles('/home/runner/.platformio/penv/bin/platformio') }}
+        key: pio-core-${{ runner.os }}-${{ hashFiles('**/platformio.ini') }}
+        restore-keys: |
+          pio-core-${{ runner.os }}-
     - name: Build firmware
       working-directory: ./LOW_LEVEL/
       env:
@@ -49,7 +51,9 @@ jobs:
       with:
         path: |
           /home/runner/.piocache
-        key: ${{ hashFiles('/home/runner/.platformio/penv/bin/platformio') }}
+        key: pio-build-${{ runner.os }}-${{ hashFiles('**/platformio.ini') }}
+        restore-keys: |
+          pio-build-${{ runner.os }}-
     - name: Firmware artifacts
       uses: actions/upload-artifact@v4
       with:
