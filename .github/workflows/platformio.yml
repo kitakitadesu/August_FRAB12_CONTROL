@@ -44,7 +44,8 @@ jobs:
         unzip \
         wget \
         xz-utils \
-        && sudo apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+        vim \
+        && sudo apt-get clean
     - name: Install PlatformIO
       run: |
         curl -fsSL -o get-platformio.py https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py
