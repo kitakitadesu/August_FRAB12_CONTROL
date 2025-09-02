@@ -1,0 +1,65 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches: [ "dev" ]
+  pull_request:
+    branches: [ "dev" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: APT packages
+      uses: awalsh128/cache-apt-pkgs-action@latest
+      with:
+        packages: software-properties-common bc bison build-essential ccache cmake curl dfu-util flex gcc git gperf jq libffi-dev libncurses-dev libssl-dev libusb-1.0-0 make ninja-build python3 python3-dev python3-pip python3-venv srecord unzip wget xz-utils vim
+        version: 1.0
+    - name: Cache PlatformIO
+      uses: actions/cache@v4
+      with:
+        path: |
+          /home/runner/.platformio
+        key: pio-core-${{ runner.os }}-${{ hashFiles('**/platformio.ini') }}
+        restore-keys: |
+          pio-core-${{ runner.os }}-
+    - name: Cache PlatformIO Build Cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          /home/runner/.piocache
+        key: pio-build-${{ runner.os }}-${{ hashFiles('**/platformio.ini') }}
+        restore-keys: |
+          pio-build-${{ runner.os }}-
+    - name: Install PlatformIO
+      run: |
+        curl -fsSL -o get-platformio.py https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py
+        python3 get-platformio.py
+        rm get-platformio.py
+        python3 -m pip install --break-system-packages pipx setuptools virtualenv
+        python3 -m pipx ensurepath
+        python3 -V
+        mkdir -p /usr/local/bin
+        ln -s /home/runner/.platformio/penv/bin/platformio /usr/local/bin/platformio
+        ln -s /home/runner/.platformio/penv/bin/pio /usr/local/bin/pio
+        ln -s /home/runner/.platformio/penv/bin/piodebuggdb /usr/local/bin/piodebuggdb
+        pio platform install raspberrypi
+    - name: Build firmware
+      working-directory: ./LOW_LEVEL/
+      env:
+        PLATFORMIO_BUILD_CACHE_DIR: /home/runner/.piocache/
+      run: |
+        mkdir -p $PLATFORMIO_BUILD_CACHE_DIR
+        pio run
+    - name: Firmware artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: Pi Pico Firmware
+        path: |
+          ./LOW_LEVEL/.pio/build/pico/firmware.uf2
+          ./LOW_LEVEL/.pio/build/pico/firmware.elf
+          ./LOW_LEVEL/.pio/build/pico/firmware.bin
+
