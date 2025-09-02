@@ -60,5 +60,5 @@ jobs:
         ln -s /home/runner/.platformio/penv/bin/piodebuggdb /usr/local/bin/piodebuggdb
         pio platform install raspberrypi
     - name: Build firmware
-      working-directory: $GITHUB_WORKSPACE/LOW_LEVEL/
+      working-directory: ./LOW_LEVEL/
       run: pio run
