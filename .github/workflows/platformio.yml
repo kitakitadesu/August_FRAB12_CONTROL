@@ -31,9 +31,19 @@ jobs:
         ln -s /home/runner/.platformio/penv/bin/pio /usr/local/bin/pio
         ln -s /home/runner/.platformio/penv/bin/piodebuggdb /usr/local/bin/piodebuggdb
         pio platform install raspberrypi
+        pio pkg install
+    - name: Cache PlatformIO
+      uses: actions/cache@v4
+      with:
+        path: |
+          /home/runner/.platformio
     - name: Build firmware
       working-directory: ./LOW_LEVEL/
-      run: pio run
+      env:
+        PLATFORMIO_BUILD_CACHE_DIR: /home/runner/.piocache/
+      run: |
+        mkdir $PLATFORMIO_BUILD_CACHE_DIR
+        pio run
     - name: Firmware artifacts
       uses: actions/upload-artifact@v4
       with:
