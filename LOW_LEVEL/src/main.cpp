@@ -42,6 +42,7 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
 void setup() {
   // Configure serial transport
   Serial.begin(115200);
+  Serial.println("Bocchi The Rock!");
   set_microros_serial_transports(Serial);
   delay(2000);
 
