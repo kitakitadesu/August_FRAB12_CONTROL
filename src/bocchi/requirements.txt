@@ -1,0 +1,6 @@
+# REST API and SSE dependencies
+Flask==2.0.3
+Flask-CORS==3.0.10
+sseclient-py==1.8.0
+requests==2.25.1
+Mako==1.1.6

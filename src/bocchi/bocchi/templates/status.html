@@ -1,0 +1,33 @@
+<div id="status-content" role="status" aria-live="polite" style="border: 1px dashed #999; padding: 0.5rem; text-align: center;">
+    % if server_running:
+        <p style="margin: 0; color: #006600;"><strong>✓ Connected to REST API server</strong></p>
+    % else:
+        <p style="margin: 0; color: #cc0000;"><strong>✗ Disconnected from REST API server</strong></p>
+    % endif
+    % if error_message:
+        <p style="margin: 0.25rem 0 0 0; font-size: 0.9em; color: #666;"><em>${error_message}</em></p>
+    % endif
+</div>
+
+<div id="stats-content">
+    <table border="1" cellpadding="8" cellspacing="0" style="width: 100%;">
+        <tbody>
+            <tr>
+                <th style="text-align: left; background: #f0f0f0; border: 1px solid #999;">Server Status</th>
+                <td style="text-align: center; border: 1px solid #999; font-weight: bold;">${'🟢 Running' if server_running else '🔴 Stopped'}</td>
+            </tr>
+            <tr>
+                <th style="text-align: left; background: #f0f0f0; border: 1px solid #999;">Connected Clients</th>
+                <td style="text-align: center; border: 1px solid #999; font-weight: bold;">${connected_clients or 0}</td>
+            </tr>
+            <tr>
+                <th style="text-align: left; background: #f0f0f0; border: 1px solid #999;">Server Uptime</th>
+                <td style="text-align: center; border: 1px solid #999; font-weight: bold;">${uptime}s</td>
+            </tr>
+            <tr>
+                <th style="text-align: left; background: #f0f0f0; border: 1px solid #999;">Version</th>
+                <td style="text-align: center; border: 1px solid #999; font-weight: bold;">${version or '1.0.0'}</td>
+            </tr>
+        </tbody>
+    </table>
+</div>

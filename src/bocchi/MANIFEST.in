@@ -1,0 +1,5 @@
+include bocchi/templates/*
+include bocchi/static/css/*
+include bocchi/static/js/*
+recursive-include bocchi/templates *
+recursive-include bocchi/static *
