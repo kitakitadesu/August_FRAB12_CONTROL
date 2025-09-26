@@ -1,0 +1,6 @@
+log/
+build/
+.idea/
+.venv/
+install/
+**/__pycache__
