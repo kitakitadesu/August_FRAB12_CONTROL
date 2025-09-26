@@ -2,5 +2,5 @@ log/
 build/
 .idea/
 .venv/
-install/
 **/__pycache__
+.DS_Store
