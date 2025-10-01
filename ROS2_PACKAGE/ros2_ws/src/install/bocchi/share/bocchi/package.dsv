@@ -1,0 +1,6 @@
+source;share/bocchi/hook/pythonpath.ps1
+source;share/bocchi/hook/pythonpath.dsv
+source;share/bocchi/hook/pythonpath.sh
+source;share/bocchi/hook/ament_prefix_path.ps1
+source;share/bocchi/hook/ament_prefix_path.dsv
+source;share/bocchi/hook/ament_prefix_path.sh

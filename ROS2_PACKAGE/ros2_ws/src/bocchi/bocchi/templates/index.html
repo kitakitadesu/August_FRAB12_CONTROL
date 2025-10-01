@@ -1,0 +1,409 @@
+<%!
+import builtins
+import operator
+%>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ROS2 REST API Keyboard Interface</title>
+    
+    <!-- Minimal CSS for responsive behavior only -->
+    <link rel="stylesheet" href="/static/css/main.css">
+    
+    <!-- HTMX for dynamic functionality -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/htmx.org/dist/ext/sse.js"></script>
+    <script src="https://unpkg.com/htmx.org/dist/ext/json-enc.js"></script>
+</head>
+<body>
+    <main style="max-width: 1200px; margin: 0 auto; padding: 1rem;">
+        
+        <!-- Header Section -->
+        <header style="text-align: center; border: 2px solid #333; padding: 1rem; margin-bottom: 1rem;">
+            <h1>ROS2 REST API Keyboard Interface</h1>
+            <p><em>Real-time keyboard input publisher for ROS2</em></p>
+        </header>
+
+        <!-- Main Content Grid -->
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+            
+            <!-- Left Column: Primary Interface -->
+            <div style="border: 2px solid #666; padding: 1rem;">
+                
+                <!-- Connection Status -->
+                <section style="border: 1px solid #999; padding: 0.5rem; margin-bottom: 1rem;">
+                    <h2 style="margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 0.5rem;">Connection Status</h2>
+                    <div id="status" 
+                         hx-get="/api/status" 
+                         hx-trigger="load, every 10s"
+                         hx-target="#status-content"
+                         role="status" 
+                         aria-live="polite"
+                         style="border: 1px dashed #999; padding: 0.5rem; text-align: center;">
+                        <div id="status-content">
+                            <p><strong>Status:</strong> Connecting to REST API server...</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Key Display -->
+                <section style="border: 1px solid #999; padding: 0.5rem; margin-bottom: 1rem;">
+                    <h2 style="margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 0.5rem;">Current Key Status</h2>
+                    <div id="keyDisplay" style="text-align: center;">
+                        <p style="border: 2px solid #333; padding: 2rem; margin: 0.5rem 0; min-height: 4rem; display: flex; align-items: center; justify-content: center;">
+                            <strong>Press and hold any key...</strong>
+                        </p>
+                    </div>
+                </section>
+
+                <!-- Instructions -->
+                <section style="border: 1px solid #999; padding: 0.5rem; margin-bottom: 1rem;">
+                    <h2 style="margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 0.5rem;">How to Use</h2>
+                    <div style="border: 1px dotted #ccc; padding: 0.5rem;">
+                        <ol>
+                            <li>Click anywhere on this page to focus it</li>
+                            <li><strong>Press and hold</strong> any key - it will send continuously while held</li>
+                            <li><strong>Release</strong> the key to stop sending</li>
+                            <li>Press 'q' to quit the publisher</li>
+                            <li>Multiple keys can be held simultaneously</li>
+                            <li>Real-time updates via Server-Sent Events (SSE)</li>
+                        </ol>
+                    </div>
+                    
+                    <!-- Control Buttons -->
+                    <fieldset style="margin-top: 1rem; border: 1px solid #666; padding: 0.5rem;">
+                        <legend><strong>Quick Actions</strong></legend>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.5rem;">
+                            <button type="button" onclick="testConnection()">Test Connection</button>
+                            <button type="button" onclick="getStatus()">Get Status</button>
+                            <button type="button" onclick="toggleSSE()">Toggle SSE</button>
+                            <button type="button" onclick="sendTestKeys()">Send Test Keys</button>
+                            <button type="button" onclick="sendKeyBatch()">Send Key Batch</button>
+                        </div>
+                    </fieldset>
+                </section>
+
+            </div>
+
+            <!-- Right Column: Statistics -->
+            <aside style="border: 2px solid #666; padding: 1rem;">
+                <h2 style="margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 0.5rem;">Server Statistics</h2>
+                <div hx-get="/api/status" 
+                     hx-trigger="load, every 5s" 
+                     hx-target="#stats-content"
+                     style="border: 1px solid #999; padding: 0.5rem;">
+                    <div id="stats-content">
+                        <table border="1" cellpadding="8" cellspacing="0" style="width: 100%;">
+                            <tbody>
+                                <tr>
+                                    <th style="text-align: left; background: #f0f0f0;">Server Status</th>
+                                    <td id="serverStatus" style="text-align: center;">${server_status or 'Unknown'}</td>
+                                </tr>
+                                <tr>
+                                    <th style="text-align: left; background: #f0f0f0;">Connected Clients</th>
+                                    <td id="connectedClients" style="text-align: center;">${connected_clients or '0'}</td>
+                                </tr>
+                                <tr>
+                                    <th style="text-align: left; background: #f0f0f0;">Server Uptime</th>
+                                    <td id="serverUptime" style="text-align: center;">${uptime or '0s'}</td>
+                                </tr>
+                                <tr>
+                                    <th style="text-align: left; background: #f0f0f0;">Keys Sent</th>
+                                    <td id="keysSent" style="text-align: center;">0</td>
+                                </tr>
+                                <tr>
+                                    <th style="text-align: left; background: #f0f0f0;">Keys Held</th>
+                                    <td id="keysHeld" style="text-align: center;">0</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </aside>
+
+        </div>
+
+        <!-- Forms Section -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+            
+            <!-- Manual Key Input -->
+            <section style="border: 2px solid #666; padding: 1rem;">
+                <h2 style="margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 0.5rem;">Manual Key Input</h2>
+                <form id="manualKeyForm" 
+                      hx-post="/api/key" 
+                      hx-ext="json-enc"
+                      hx-target="#manual-result"
+                      hx-indicator="#manual-loading">
+                    <fieldset style="border: 1px solid #999; padding: 1rem;">
+                        <legend><strong>Single Key Entry</strong></legend>
+                        <table style="width: 100%;" cellpadding="5">
+                            <tr>
+                                <td style="width: 30%;"><label for="manual-key"><strong>Key:</strong></label></td>
+                                <td><input type="text" id="manual-key" name="key" maxlength="1" required placeholder="Enter single key" style="width: 100%;"></td>
+                            </tr>
+                            <tr>
+                                <td><label for="manual-key-code"><strong>Key Code:</strong></label></td>
+                                <td><input type="number" id="manual-key-code" name="key_code" min="0" max="255" required placeholder="ASCII code" style="width: 100%;"></td>
+                            </tr>
+                            <tr>
+                                <td colspan="2" style="text-align: center; padding-top: 0.5rem;">
+                                    <input type="hidden" name="timestamp" value="${timestamp}">
+                                    <label>
+                                        <input type="checkbox" id="manual-is-held" name="is_held" value="true">
+                                        <strong>Mark as held key</strong>
+                                    </label>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td colspan="2" style="text-align: center; padding-top: 0.5rem;">
+                                    <button type="submit" style="padding: 0.5rem 1rem;">
+                                        <span id="manual-loading" style="display: none;">⏳ </span>
+                                        <strong>Send Key</strong>
+                                    </button>
+                                </td>
+                            </tr>
+                        </table>
+                    </fieldset>
+                    <div id="manual-result" role="status" aria-live="polite" style="border: 1px dotted #ccc; padding: 0.5rem; margin-top: 0.5rem; min-height: 1rem;"></div>
+                </form>
+            </section>
+
+            <!-- Batch Key Input -->
+            <section style="border: 2px solid #666; padding: 1rem;">
+                <h2 style="margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 0.5rem;">Batch Key Input</h2>
+                <form id="batchKeyForm" 
+                      hx-post="/api/keys/batch" 
+                      hx-ext="json-enc"
+                      hx-target="#batch-result"
+                      hx-indicator="#batch-loading">
+                    <fieldset style="border: 1px solid #999; padding: 1rem;">
+                        <legend><strong>Multiple Keys Entry</strong></legend>
+                        <div style="margin-bottom: 1rem;">
+                            <label for="batch-keys"><strong>Keys (format: key1:code1,key2:code2):</strong></label><br>
+                            <textarea id="batch-keys" name="keys_input" rows="4" cols="30" placeholder="a:97,b:98,SPACE:32" required style="width: 100%; margin-top: 0.25rem;"></textarea><br>
+                            <small style="color: #666;"><em>Example: a:97,b:98,SPACE:32</em></small>
+                        </div>
+                        <div style="text-align: center;">
+                            <button type="submit" style="padding: 0.5rem 1rem;">
+                                <span id="batch-loading" style="display: none;">⏳ </span>
+                                <strong>Send Batch</strong>
+                            </button>
+                        </div>
+                    </fieldset>
+                    <div id="batch-result" role="status" aria-live="polite" style="border: 1px dotted #ccc; padding: 0.5rem; margin-top: 0.5rem; min-height: 1rem;"></div>
+                </form>
+            </section>
+
+        </div>
+
+        <!-- Information Sections -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+            
+            <!-- API Information -->
+            <section style="border: 2px solid #666; padding: 1rem;">
+                <h2 style="margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 0.5rem;">REST API Endpoints</h2>
+                <div style="border: 1px solid #999; padding: 0.5rem;">
+                    <table border="1" cellpadding="8" cellspacing="0" style="width: 100%;">
+                        <thead>
+                            <tr style="background: #f0f0f0;">
+                                <th>Method</th>
+                                <th>Endpoint</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>GET</strong></td>
+                                <td><code>/api/status</code></td>
+                                <td>Get server status</td>
+                            </tr>
+                            <tr>
+                                <td><strong>POST</strong></td>
+                                <td><code>/api/key</code></td>
+                                <td>Send single key (with held state)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>POST</strong></td>
+                                <td><code>/api/key/down</code></td>
+                                <td>Key press down event</td>
+                            </tr>
+                            <tr>
+                                <td><strong>POST</strong></td>
+                                <td><code>/api/key/up</code></td>
+                                <td>Key release up event</td>
+                            </tr>
+                            <tr>
+                                <td><strong>POST</strong></td>
+                                <td><code>/api/keys/batch</code></td>
+                                <td>Send multiple keys</td>
+                            </tr>
+                            <tr>
+                                <td><strong>GET</strong></td>
+                                <td><code>/api/events</code></td>
+                                <td>Server-Sent Events stream</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <fieldset style="margin-top: 1rem; border: 1px solid #999; padding: 0.5rem;">
+                    <legend><strong>Server Information</strong></legend>
+                    <dl style="margin: 0;">
+                        <dt><strong>Current Host:</strong></dt>
+                        <dd id="currentHost" style="margin-bottom: 0.5rem;">${current_host or 'localhost'}</dd>
+                        <dt><strong>API Base URL:</strong></dt>
+                        <dd id="apiUrl" style="margin-bottom: 0.5rem;">${api_base or 'http://localhost:5000'}</dd>
+                        <dt><strong>Web Interface URL:</strong></dt>
+                        <dd id="webUrl">${web_url or 'http://localhost:8000'}</dd>
+                    </dl>
+                </fieldset>
+            </section>
+
+            <!-- Live Events -->
+            <section style="border: 2px solid #666; padding: 1rem;">
+                <h2 style="margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 0.5rem;">Live Events (SSE)</h2>
+                <div hx-ext="sse" 
+                     sse-connect="/api/events"
+                     sse-swap="message"
+                     style="border: 1px solid #999; padding: 0.5rem;">
+                    <div id="live-events" 
+                         sse-swap="message"
+                         hx-swap="beforeend"
+                         role="log"
+                         aria-live="polite"
+                         aria-label="Live server events"
+                         style="border: 1px solid #ccc; padding: 0.5rem; height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.85em; background: #fafafa;">
+                        <div style="color: #666;">Connecting to event stream...</div>
+                    </div>
+                </div>
+                <div style="margin-top: 0.5rem; text-align: center;">
+                    <button type="button" onclick="toggleSSE()" style="margin-right: 0.5rem;">Toggle SSE</button>
+                    <button type="button" onclick="clearSSEMessages()">Clear Messages</button>
+                </div>
+            </section>
+
+        </div>
+
+        <!-- Collapsible Information Sections -->
+        <div style="border: 2px solid #666; padding: 1rem; margin-bottom: 1rem;">
+            
+            <!-- Debug Information -->
+            <details style="border: 1px solid #999; padding: 0.5rem; margin-bottom: 1rem;">
+                <summary style="cursor: pointer; font-weight: bold; padding: 0.5rem; background: #f0f0f0; border: 1px solid #ccc;"><strong>🔧 Debug Log</strong></summary>
+                <div style="border: 1px solid #ccc; margin-top: 0.5rem;">
+                    <div id="debugInfo" 
+                         role="log" 
+                         aria-live="polite"
+                         style="padding: 0.5rem; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 0.8em; background: #f9f9f9; border: 1px inset #ccc;">
+                        <div id="debugMessages">
+[${timestamp}] Interface initialized with Mako templating and HTMX
+[${timestamp}] Server: ${server_info or 'ROS2 REST API Server'}
+[${timestamp}] Version: ${version or '1.0.0'}
+                        </div>
+                    </div>
+                </div>
+            </details>
+
+            <!-- Network Information -->
+            <details style="border: 1px solid #999; padding: 0.5rem;">
+                <summary style="cursor: pointer; font-weight: bold; padding: 0.5rem; background: #f0f0f0; border: 1px solid #ccc;"><strong>🌐 Network Information</strong></summary>
+                <div style="border: 1px solid #ccc; margin-top: 0.5rem; padding: 0.5rem;">
+                    <fieldset style="border: 1px solid #999; padding: 0.5rem; margin-bottom: 1rem;">
+                        <legend><strong>Connection Details</strong></legend>
+                        <dl style="margin: 0;">
+                            <dt><strong>Current URL:</strong></dt>
+                            <dd style="margin-bottom: 0.5rem; font-family: monospace; font-size: 0.9em;">${current_url or 'window.location.href'}</dd>
+                            <dt><strong>Hostname:</strong></dt>
+                            <dd style="margin-bottom: 0.5rem; font-family: monospace; font-size: 0.9em;">${current_host or 'localhost'}</dd>
+                            <dt><strong>Protocol:</strong></dt>
+                            <dd style="margin-bottom: 0.5rem; font-family: monospace; font-size: 0.9em;">${protocol or 'http'}</dd>
+                            <dt><strong>Available IPs:</strong></dt>
+                            <dd style="font-family: monospace; font-size: 0.9em;">${available_ips or 'localhost'}</dd>
+                        </dl>
+                    </fieldset>
+                    
+                    <fieldset style="border: 1px solid #999; padding: 0.5rem;">
+                        <legend><strong>Access URLs</strong></legend>
+                        % if 'available_ips' in context._data and available_ips and available_ips != 'localhost':
+                            <table border="1" cellpadding="5" cellspacing="0" style="width: 100%; font-size: 0.85em;">
+                                <thead>
+                                    <tr style="background: #f0f0f0;">
+                                        <th>IP Address</th>
+                                        <th>Web Interface</th>
+                                        <th>REST API</th>
+                                        <th>SSE Events</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    % for ip in str(available_ips).split(','):
+                                    <tr>
+                                        <td style="font-family: monospace;"><strong>${str(ip).strip()}</strong></td>
+                                        <td><code>http://${str(ip).strip()}:8000</code></td>
+                                        <td><code>http://${str(ip).strip()}:5000</code></td>
+                                        <td><code>http://${str(ip).strip()}:5000/api/events</code></td>
+                                    </tr>
+                                    % endfor
+                                </tbody>
+                            </table>
+                        % else:
+                            <table border="1" cellpadding="5" cellspacing="0" style="width: 100%; font-size: 0.85em;">
+                                <thead>
+                                    <tr style="background: #f0f0f0;">
+                                        <th>Service</th>
+                                        <th>URL</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Web Interface</strong></td>
+                                        <td><code>http://localhost:8000</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>REST API</strong></td>
+                                        <td><code>http://localhost:5000</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>SSE Events</strong></td>
+                                        <td><code>http://localhost:5000/api/events</code></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        % endif
+                    </fieldset>
+                </div>
+            </details>
+
+        </div>
+
+        <!-- Footer -->
+        <footer style="border: 2px solid #333; padding: 1rem; text-align: center; margin-top: 2rem; background: #f8f8f8;">
+            <p><strong>ROS2 REST API Keyboard Interface</strong></p>
+            <p><small>Real-time keyboard input publisher with Server-Sent Events • Version ${version or '1.0.0'}</small></p>
+        </footer>
+
+    </main>
+
+    <!-- JavaScript -->
+    <script src="/static/js/keyboard.js"></script>
+    
+    <script>
+    <%text>
+        // Auto-fill key code based on key input
+        document.getElementById('manual-key')?.addEventListener('input', function(e) {
+            const keyCodeInput = document.getElementById('manual-key-code');
+            if (e.target.value.length === 1 && keyCodeInput) {
+                keyCodeInput.value = e.target.value.charCodeAt(0);
+            }
+        });
+
+        // Focus management for accessibility
+        document.addEventListener('DOMContentLoaded', function() {
+            document.body.tabIndex = -1;
+            document.body.focus();
+        });
+    </%text>
+    </script>
+</body>
+</html>
