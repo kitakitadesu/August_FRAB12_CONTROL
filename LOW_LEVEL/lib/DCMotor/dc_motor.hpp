@@ -6,6 +6,7 @@
 class DCMotor {
 public:
     DCMotor(int pin1, int pin2, int enablePin);
+    ~DCMotor();
 
     void setup();
     void setSpeed(uint8_t speed);
