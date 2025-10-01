@@ -1,0 +1,19 @@
+.Raspberry Pi Pico Pin Mapping
+[cols="1,1,2"]
+|===
+| Device | Function | Pico Pin (GPIO)
+
+| Motor M1 | IN1 / IN2 / PWM | GP0 / GP1 / GP2
+| Motor M2 | IN1 / IN2 / PWM | GP3 / GP4 / GP5
+| Motor M3 | IN1 / IN2 / PWM | GP6 / GP7 / GP8
+| Motor M4 | IN1 / IN2 / PWM | GP9 / GP10 / GP11
+| Encoder M1 | A / B | GP12 / GP13
+| Encoder M2 | A / B | GP14 / GP15
+| Encoder M3 | A / B | GP16 / GP17
+| Encoder M4 | A / B | GP18 / GP19
+| I²C (IMU) | SDA / SCL | GP20 / GP21
+| Servo 1 | Signal | GP22
+| Servo 2 | Signal | GP26
+| Servo 3 | Signal | GP27 (หรือ GP23/24 ถ้าใช้ STBY)
+| Servo 4 | Signal | GP28
+|===
