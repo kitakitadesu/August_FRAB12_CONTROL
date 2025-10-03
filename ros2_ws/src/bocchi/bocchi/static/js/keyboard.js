@@ -3,15 +3,16 @@
 class KeyboardInterface {
     constructor() {
         this.connected = false;
-        this.eventSource = null;
+        this.websocket = null;
         this.keysSentCount = 0;
-        this.sseEnabled = true;
+        this.websocketEnabled = true;
         this.heldKeys = new Map(); // Track held keys
         this.keyIntervals = new Map(); // Track intervals for held keys
         
         // Dynamic API base URL based on current hostname
         this.currentHost = window.location.hostname;
         this.apiBase = `http://${this.currentHost}:5000`;
+        this.websocketUrl = `ws://${this.currentHost}:8765`;
         
         this.init();
     }
@@ -46,9 +47,9 @@ class KeyboardInterface {
         
         this.testConnection();
         
-        // Start SSE if enabled
-        if (this.sseEnabled) {
-            this.connectSSE();
+        // Start WebSocket if enabled
+        if (this.websocketEnabled) {
+            this.connectWebSocket();
         }
         
         document.body.focus(); // Focus the body to receive keyboard events
@@ -316,85 +317,134 @@ class KeyboardInterface {
         }
     }
 
-    connectSSE() {
-        if (this.eventSource) {
+    connectWebSocket() {
+        if (this.websocket) {
             return;
         }
 
         try {
-            this.eventSource = new EventSource(`${this.apiBase}/api/events`);
+            this.websocket = new WebSocket(this.websocketUrl);
 
-            this.eventSource.onopen = (event) => {
-                this.addDebugMessage('SSE connection opened');
+            this.websocket.onopen = (event) => {
+                this.addDebugMessage('WebSocket connection opened');
+                this.connected = true;
             };
 
-            this.eventSource.onmessage = (event) => {
+            this.websocket.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
-                    this.handleSSEEvent(data);
+                    this.handleWebSocketEvent(data);
                 } catch (e) {
-                    this.addDebugMessage(`SSE parse error: ${e.message}`);
+                    this.addDebugMessage(`WebSocket parse error: ${e.message}`);
                 }
             };
 
-            this.eventSource.onerror = (event) => {
-                this.addDebugMessage('SSE connection error');
-                this.eventSource.close();
-                this.eventSource = null;
+            this.websocket.onclose = (event) => {
+                this.addDebugMessage('WebSocket connection closed');
+                this.connected = false;
+                this.websocket = null;
                 
                 // Reconnect after delay
                 setTimeout(() => {
-                    if (this.sseEnabled) this.connectSSE();
+                    if (this.websocketEnabled) this.connectWebSocket();
                 }, 5000);
             };
 
+            this.websocket.onerror = (error) => {
+                this.addDebugMessage(`WebSocket connection error: ${error.message || 'Unknown error'}`);
+            };
+
         } catch (error) {
-            this.addDebugMessage(`SSE connection failed: ${error.message}`);
+            this.addDebugMessage(`WebSocket connection failed: ${error.message}`);
         }
     }
 
-    handleSSEEvent(data) {
+    handleWebSocketEvent(data) {
         const eventType = data.type || 'unknown';
         const timestamp = new Date(data.timestamp || Date.now()).toLocaleTimeString();
         
+        // Add to live events display
+        const liveEventsDiv = document.getElementById('live-events');
+        if (liveEventsDiv) {
+            const eventDiv = document.createElement('div');
+            eventDiv.style.marginBottom = '2px';
+            eventDiv.style.fontSize = '0.8em';
+            
+            switch (eventType) {
+                case 'welcome':
+                    eventDiv.innerHTML = `<span style="color: #0a84ff;">[${timestamp}] ${data.message || ''}</span>`;
+                    break;
+                case 'key_received':
+                    const heldText = data.is_held ? ' (HELD)' : '';
+                    eventDiv.innerHTML = `<span style="color: #32d74b;">[${timestamp}] Key: '${data.key}' (${data.key_code})${heldText}</span>`;
+                    break;
+                case 'key_down':
+                    eventDiv.innerHTML = `<span style="color: #ff9f0a;">[${timestamp}] DOWN: '${data.key}' (${data.key_code})</span>`;
+                    break;
+                case 'key_up':
+                    eventDiv.innerHTML = `<span style="color: #ff453a;">[${timestamp}] UP: '${data.key}' (${data.key_code})</span>`;
+                    break;
+                case 'keys_batch':
+                    eventDiv.innerHTML = `<span style="color: #bf5af2;">[${timestamp}] Batch: ${data.keys?.length || 0} keys</span>`;
+                    break;
+                default:
+                    eventDiv.innerHTML = `<span style="color: #8e8e93;">[${timestamp}] ${eventType}</span>`;
+            }
+            
+            liveEventsDiv.appendChild(eventDiv);
+            
+            // Keep only last 50 messages
+            while (liveEventsDiv.children.length > 50) {
+                liveEventsDiv.removeChild(liveEventsDiv.firstChild);
+            }
+            
+            // Auto-scroll to bottom
+            liveEventsDiv.scrollTop = liveEventsDiv.scrollHeight;
+        }
+        
+        // Also add to debug messages
         switch (eventType) {
             case 'welcome':
-                this.addDebugMessage(`[SSE ${timestamp}] ${data.message || ''}`);
+                this.addDebugMessage(`[WS ${timestamp}] ${data.message || ''}`);
                 break;
             case 'key_received':
                 const heldText = data.is_held ? ' (HELD)' : '';
-                this.addDebugMessage(`[SSE ${timestamp}] Server processed key: '${data.key}' (${data.key_code})${heldText}`);
+                this.addDebugMessage(`[WS ${timestamp}] Server processed key: '${data.key}' (${data.key_code})${heldText}`);
                 break;
             case 'key_down':
-                this.addDebugMessage(`[SSE ${timestamp}] Key DOWN: '${data.key}' (${data.key_code})`);
+                this.addDebugMessage(`[WS ${timestamp}] Key DOWN: '${data.key}' (${data.key_code})`);
                 break;
             case 'key_up':
-                this.addDebugMessage(`[SSE ${timestamp}] Key UP: '${data.key}' (${data.key_code})`);
+                this.addDebugMessage(`[WS ${timestamp}] Key UP: '${data.key}' (${data.key_code})`);
                 break;
             case 'keys_batch':
-                this.addDebugMessage(`[SSE ${timestamp}] Server processed batch: ${data.keys?.length || 0} keys`);
+                this.addDebugMessage(`[WS ${timestamp}] Server processed batch: ${data.keys?.length || 0} keys`);
                 break;
-            case 'ping':
-                // Silent keepalive
-                break;
-            default:
-                this.addDebugMessage(`[SSE ${timestamp}] ${eventType}: ${JSON.stringify(data)}`);
         }
     }
 
-    toggleSSE() {
-        this.sseEnabled = !this.sseEnabled;
+    toggleWebSocket() {
+        this.websocketEnabled = !this.websocketEnabled;
         
-        if (this.sseEnabled) {
-            this.connectSSE();
-            this.addDebugMessage('SSE enabled');
+        if (this.websocketEnabled) {
+            this.connectWebSocket();
+            this.addDebugMessage('WebSocket enabled');
         } else {
-            if (this.eventSource) {
-                this.eventSource.close();
-                this.eventSource = null;
+            if (this.websocket) {
+                this.websocket.close();
+                this.websocket = null;
+                this.connected = false;
             }
-            this.addDebugMessage('SSE disabled');
+            this.addDebugMessage('WebSocket disabled');
         }
+    }
+    
+    clearMessages() {
+        const liveEventsDiv = document.getElementById('live-events');
+        if (liveEventsDiv) {
+            liveEventsDiv.innerHTML = '<div style="color: #666;">Messages cleared...</div>';
+        }
+        this.addDebugMessage('Live events cleared');
     }
 
     cleanup() {
@@ -403,10 +453,10 @@ class KeyboardInterface {
         this.keyIntervals.clear();
         this.heldKeys.clear();
         
-        // Close SSE connection
-        if (this.eventSource) {
-            this.eventSource.close();
-            this.eventSource = null;
+        // Close WebSocket connection
+        if (this.websocket) {
+            this.websocket.close();
+            this.websocket = null;
         }
     }
 
@@ -468,7 +518,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Make functions available globally for button onclick handlers
     window.testConnection = () => keyboardInterface.testConnection();
     window.getStatus = () => keyboardInterface.getStatus();
-    window.toggleSSE = () => keyboardInterface.toggleSSE();
+    window.toggleWebSocket = () => keyboardInterface.toggleWebSocket();
+    window.clearMessages = () => keyboardInterface.clearMessages();
     window.sendTestKeys = () => keyboardInterface.sendTestKeys();
     window.sendKeyBatch = () => keyboardInterface.sendKeyBatch();
 });

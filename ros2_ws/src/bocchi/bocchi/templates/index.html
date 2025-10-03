@@ -14,7 +14,6 @@ import operator
     
     <!-- HTMX for dynamic functionality -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    <script src="https://unpkg.com/htmx.org/dist/ext/sse.js"></script>
     <script src="https://unpkg.com/htmx.org/dist/ext/json-enc.js"></script>
 </head>
 <body>
@@ -68,7 +67,7 @@ import operator
                             <li><strong>Release</strong> the key to stop sending</li>
                             <li>Press 'q' to quit the publisher</li>
                             <li>Multiple keys can be held simultaneously</li>
-                            <li>Real-time updates via Server-Sent Events (SSE)</li>
+                            <li>Real-time updates via WebSocket</li>
                         </ol>
                     </div>
                     
@@ -78,7 +77,7 @@ import operator
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.5rem;">
                             <button type="button" onclick="testConnection()">Test Connection</button>
                             <button type="button" onclick="getStatus()">Get Status</button>
-                            <button type="button" onclick="toggleSSE()">Toggle SSE</button>
+                            <button type="button" onclick="toggleWebSocket()">Toggle WebSocket</button>
                             <button type="button" onclick="sendTestKeys()">Send Test Keys</button>
                             <button type="button" onclick="sendKeyBatch()">Send Key Batch</button>
                         </div>
@@ -300,9 +299,9 @@ import operator
                                 <td>Send multiple keys</td>
                             </tr>
                             <tr>
-                                <td><strong>GET</strong></td>
-                                <td><code>/api/events</code></td>
-                                <td>Server-Sent Events stream</td>
+                                <td><strong>WebSocket</strong></td>
+                                <td><code>ws://host:8765</code></td>
+                                <td>Real-time WebSocket communication</td>
                             </tr>
                         </tbody>
                     </table>
@@ -323,24 +322,19 @@ import operator
 
             <!-- Live Events -->
             <section style="border: 2px solid #666; padding: 1rem;">
-                <h2 style="margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 0.5rem;">Live Events (SSE)</h2>
-                <div hx-ext="sse" 
-                     sse-connect="/api/events"
-                     sse-swap="message"
-                     style="border: 1px solid #999; padding: 0.5rem;">
+                <h2 style="margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 0.5rem;">Live Events (WebSocket)</h2>
+                <div style="border: 1px solid #999; padding: 0.5rem;">
                     <div id="live-events" 
-                         sse-swap="message"
-                         hx-swap="beforeend"
                          role="log"
                          aria-live="polite"
                          aria-label="Live server events"
                          style="border: 1px solid #ccc; padding: 0.5rem; height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.85em; background: #fafafa;">
-                        <div style="color: #666;">Connecting to event stream...</div>
+                        <div style="color: #666;">Connecting to WebSocket...</div>
                     </div>
                 </div>
                 <div style="margin-top: 0.5rem; text-align: center;">
-                    <button type="button" onclick="toggleSSE()" style="margin-right: 0.5rem;">Toggle SSE</button>
-                    <button type="button" onclick="clearSSEMessages()">Clear Messages</button>
+                    <button type="button" onclick="toggleWebSocket()" style="margin-right: 0.5rem;">Toggle WebSocket</button>
+                    <button type="button" onclick="clearMessages()">Clear Messages</button>
                 </div>
             </section>
 
@@ -402,7 +396,7 @@ import operator
                                         <td style="font-family: monospace;"><strong>${str(ip).strip()}</strong></td>
                                         <td><code>http://${str(ip).strip()}:8000</code></td>
                                         <td><code>http://${str(ip).strip()}:5000</code></td>
-                                        <td><code>http://${str(ip).strip()}:5000/api/events</code></td>
+                                        <td><code>ws://${str(ip).strip()}:8765</code></td>
                                     </tr>
                                     % endfor
                                 </tbody>
@@ -425,8 +419,8 @@ import operator
                                         <td><code>http://localhost:5000</code></td>
                                     </tr>
                                     <tr>
-                                        <td><strong>SSE Events</strong></td>
-                                        <td><code>http://localhost:5000/api/events</code></td>
+                                        <td><strong>WebSocket</strong></td>
+                                        <td><code>ws://localhost:8765</code></td>
                                     </tr>
                                 </tbody>
                             </table>
