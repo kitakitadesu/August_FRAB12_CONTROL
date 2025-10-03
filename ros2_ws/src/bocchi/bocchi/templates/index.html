@@ -85,6 +85,66 @@ import operator
                     </fieldset>
                 </section>
 
+                <!-- Robot Control Keys -->
+                <section style="border: 1px solid #999; padding: 0.5rem; margin-bottom: 1rem;">
+                    <h2 style="margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 0.5rem;">🎮 Robot Control Keys</h2>
+                    <div style="border: 1px solid #ccc; padding: 0.5rem;">
+                        <table border="1" cellpadding="8" cellspacing="0" style="width: 100%;">
+                            <thead>
+                                <tr style="background: #f0f0f0;">
+                                    <th>Key</th>
+                                    <th>Action</th>
+                                    <th>Topic & Message</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><strong>W</strong></td>
+                                    <td>Move Forward</td>
+                                    <td><code>/cmd_vel: linear.x = 0.5</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>S</strong></td>
+                                    <td>Move Backward</td>
+                                    <td><code>/cmd_vel: linear.x = -0.5</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>A</strong></td>
+                                    <td>Turn Left</td>
+                                    <td><code>/cmd_vel: angular.z = 0.5</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>D</strong></td>
+                                    <td>Turn Right</td>
+                                    <td><code>/cmd_vel: angular.z = -0.5</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>F</strong></td>
+                                    <td>Servo Toggle</td>
+                                    <td><code>/servo_position: 0° ↔ 180°</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Other keys</strong></td>
+                                    <td>Stop</td>
+                                    <td><code>/cmd_vel: all values = 0.0</code></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <fieldset style="margin-top: 1rem; border: 1px solid #999; padding: 0.5rem;">
+                        <legend><strong>ROS2 Topics</strong></legend>
+                        <dl style="margin: 0;">
+                            <dt><strong>Movement Topic:</strong></dt>
+                            <dd style="margin-bottom: 0.5rem;"><code>/cmd_vel</code> (geometry_msgs/Twist)</dd>
+                            <dt><strong>Servo Topic:</strong></dt>
+                            <dd style="margin-bottom: 0.5rem;"><code>/servo_position</code> (std_msgs/Int32)</dd>
+                            <dt><strong>Publishing Rate:</strong></dt>
+                            <dd>20 Hz (0.05s timer)</dd>
+                        </dl>
+                    </fieldset>
+                </section>
+
             </div>
 
             <!-- Right Column: Statistics -->

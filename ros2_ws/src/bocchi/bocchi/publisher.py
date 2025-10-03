@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 import signal
+from geometry_msgs.msg import Twist
 from std_msgs.msg import Int32
 import sys
 import threading
@@ -57,30 +58,84 @@ class KeyStateManager:
 
     def __init__(self, debounce_time=0.05):
         self.debounce_time = debounce_time
-        self.current_key = None
+        self.current_keys = set()
+        self.servo_position = 0  # Track servo position (0 or 180)
         self.last_key_time = 0
         self.key_changed = False
+        self.servo_changed = False
         self.lock = Lock()
 
-    def update_key(self, key_code):
+    def update_key(self, key_code, is_pressed=True):
         with self.lock:
             current_time = time.time()
-
-            # Check if key has changed or debounce time has passed
-            if (self.current_key != key_code or
-                current_time - self.last_key_time > self.debounce_time):
-
-                self.current_key = key_code
+            
+            # Handle F key for servo toggle
+            if key_code == 70 and is_pressed:  # F key
+                self.servo_position = 180 if self.servo_position == 0 else 0
+                self.servo_changed = True
                 self.last_key_time = current_time
-                self.key_changed = True
                 return True
+            
+            if is_pressed:
+                if key_code not in self.current_keys:
+                    self.current_keys.add(key_code)
+                    self.last_key_time = current_time
+                    self.key_changed = True
+                    return True
+            else:
+                if key_code in self.current_keys:
+                    self.current_keys.remove(key_code)
+                    self.last_key_time = current_time
+                    self.key_changed = True
+                    return True
             return False
 
-    def get_key_if_changed(self):
+    def get_twist_if_changed(self):
         with self.lock:
             if self.key_changed:
                 self.key_changed = False
-                return self.current_key
+                return self._calculate_twist()
+            return None
+    
+    def _calculate_twist(self):
+        """Calculate Twist message based on current pressed keys"""
+        twist = Twist()
+        
+        # Key mappings based on WASD keys
+        # W = forward (87)
+        # S = backward (83)
+        # A = turn left (65)
+        # D = turn right (68)
+        
+        # Linear velocity (forward/backward)
+        if 87 in self.current_keys:  # W
+            twist.linear.x = 0.5
+        elif 83 in self.current_keys:  # S
+            twist.linear.x = -0.5
+        else:
+            twist.linear.x = 0.0
+            
+        # Angular velocity (left/right turn)
+        if 65 in self.current_keys:  # A
+            twist.angular.z = 0.5
+        elif 68 in self.current_keys:  # D
+            twist.angular.z = -0.5
+        else:
+            twist.angular.z = 0.0
+            
+        # All other fields remain 0.0 by default
+        twist.linear.y = 0.0
+        twist.linear.z = 0.0
+        twist.angular.x = 0.0
+        twist.angular.y = 0.0
+        
+        return twist
+    
+    def get_servo_if_changed(self):
+        with self.lock:
+            if self.servo_changed:
+                self.servo_changed = False
+                return self.servo_position
             return None
 
 class NetworkInfoCache:
@@ -417,7 +472,7 @@ class KeyboardAPI:
                 timestamp = data.get('timestamp', int(time.time() * 1000))
 
                 # Update key state only if changed
-                if self.publisher_node.key_manager.update_key(key_code):
+                if self.publisher_node.key_manager.update_key(key_code, is_pressed=True):
                     print(f"Key DOWN: '{key}' (code: {key_code})")
 
                     # Add to event batcher for SSE clients
@@ -459,6 +514,8 @@ class KeyboardAPI:
                 key_code = data.get('key_code', 0)
                 timestamp = data.get('timestamp', int(time.time() * 1000))
 
+                # Update key state for key release
+                self.publisher_node.key_manager.update_key(key_code, is_pressed=False)
                 print(f"Key UP: '{key}' (code: {key_code})")
 
                 # Add to event batcher for SSE clients
@@ -587,7 +644,8 @@ class KeyboardAPI:
 class MinimalPublisher(Node):
     def __init__(self):
         super().__init__('minimal_publisher')
-        self.publisher_ = self.create_publisher(Int32, 'keyboard', 10)
+        self.publisher_ = self.create_publisher(Twist, 'cmd_vel', 10)
+        self.servo_publisher_ = self.create_publisher(Int32, 'servo_position', 10)
 
         # Optimized timer - only publish when key changes
         timer_period = 0.05  # Reduced frequency
@@ -622,7 +680,8 @@ class MinimalPublisher(Node):
         print("  ✓ Key state debouncing to prevent duplicate ROS2 publications")
         print("  ✓ Network info caching to reduce system calls")
         print("  ✓ Efficient client queue management")
-        print("Press any key in the web browser to publish to /keyboard topic")
+        print("Press WASD keys for movement and F key for servo toggle")
+        print("W: Forward, S: Backward, A: Turn Left, D: Turn Right, F: Servo 0°/180°")
         print("=" * 50)
         self.print_network_info()
 
@@ -718,12 +777,17 @@ class MinimalPublisher(Node):
 
     def timer_callback(self):
         """Optimized timer callback - only publish when key state changes"""
-        key_code = self.key_manager.get_key_if_changed()
-        if key_code is not None:
-            msg = Int32()
-            msg.data = key_code
-            self.publisher_.publish(msg)
-            self.get_logger().info(f'Publishing key state change: {key_code}')
+        twist_msg = self.key_manager.get_twist_if_changed()
+        if twist_msg is not None:
+            self.publisher_.publish(twist_msg)
+            self.get_logger().info(f'Publishing cmd_vel: linear.x={twist_msg.linear.x}, angular.z={twist_msg.angular.z}')
+        
+        servo_position = self.key_manager.get_servo_if_changed()
+        if servo_position is not None:
+            servo_msg = Int32()
+            servo_msg.data = servo_position
+            self.servo_publisher_.publish(servo_msg)
+            self.get_logger().info(f'Publishing servo position: {servo_position}°')
 
     def __del__(self):
         """Cleanup when the node is destroyed"""
