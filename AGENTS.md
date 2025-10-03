@@ -10,8 +10,10 @@
 ### Docker Management Commands
 - `./docker.sh build` - Build the Docker image (default: ros-base)
 - `./docker.sh build --desktop` - Build with ros-desktop image (includes GUI packages)
+- `./docker.sh build --platform linux/amd64` - Build for specific platform (cross-platform support)
 - `./docker.sh run` - Build and run new container (default: ros-base)
 - `./docker.sh run --desktop` - Build and run with ros-desktop image
+- `./docker.sh run --platform linux/amd64` - Run with specific platform
 - `./docker.sh start` - Start existing container
 - `./docker.sh stop` - Stop container
 - `./docker.sh shell` - Open shell in container (manual access)
@@ -50,6 +52,10 @@ Use `./ros2-docker.sh` for all ROS2 operations with automatic environment setup:
 
 # Open shell for interactive development
 ./ros2-docker.sh shell
+
+# Cross-platform examples (useful for Apple Silicon Macs)
+./docker.sh build --platform linux/amd64
+./docker.sh run --platform linux/amd64 --desktop
 ```
 
 ## Native Setup (Alternative)
@@ -79,6 +85,7 @@ The Docker container runs Dropbear SSH server:
 ### Image Options
 - **Default (ros-base)**: Minimal ROS2 installation, smaller image size, faster builds
 - **Desktop (--desktop)**: Full ROS2 desktop with GUI tools like RViz, Gazebo, rqt
+- **Platform (--platform)**: Cross-platform support (e.g., `linux/amd64` for Apple Silicon compatibility)
 
 ## Code style
 - Use dependency injection patterns where possible
