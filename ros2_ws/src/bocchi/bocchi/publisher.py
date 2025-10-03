@@ -784,6 +784,9 @@ class KeyboardAPI:
 
                 # Update key state only if changed (reduces ROS2 publications)
                 if self.publisher_node.key_manager.update_key(key_code):
+                    # Process the key input (handles LED toggle, movement, etc.)
+                    self.publisher_node.process_key_input(key, key_code)
+
                     held_status = " (HELD)" if is_held else ""
                     print(f"Key state updated: '{key}' (code: {key_code}){held_status}")
 
