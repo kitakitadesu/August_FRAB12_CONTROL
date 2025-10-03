@@ -8,6 +8,9 @@ CONTAINER_NAME="ros2-bocchi-dev"
 IMAGE_NAME="ros2-bocchi"
 DOCKERFILE="Dockerfile"  # Default to base image
 PLATFORM=""  # Default to native platform
+USE_PREBUILT=false  # Whether to use pre-built image
+PREBUILT_IMAGE=""  # Pre-built image name
+SECURITY_OPTS=""  # Security options for Docker run
 
 function show_help() {
     echo "Usage: $0 COMMAND [OPTIONS]"
@@ -24,15 +27,16 @@ function show_help() {
     echo "  help                 Show this help message"
     echo ""
     echo "Options:"
-    echo "  --desktop            Use ros:humble-desktop image (Dockerfile.desktop)"
+    echo "  --desktop            Use ghcr.io/tiryoh/ros2-desktop-vnc:humble (pre-built VNC image)"
+    echo "                       Note: --security-opt seccomp=unconfined required for Ubuntu Jammy"
     echo "                       Default: ros:humble-ros-base image (Dockerfile)"
     echo "  --platform PLATFORM  Build for specific platform (e.g., linux/amd64)"
     echo "                       Default: native platform"
     echo ""
     echo "Examples:"
-    echo "  $0 build --desktop"
-    echo "  $0 build --platform linux/amd64"
-    echo "  $0 run --desktop --platform linux/amd64"
+    echo "  $0 run --desktop                    # Run with VNC desktop image"
+    echo "  $0 build --platform linux/amd64     # Build base image for specific platform"
+    echo "  $0 run --desktop --platform linux/amd64  # Run desktop image for specific platform"
     echo ""
     echo "ROS2 Development:"
     echo "  Use ./ros2-docker.sh for ROS2 commands (build, run, shell, etc.)"
@@ -43,12 +47,23 @@ function show_help() {
 }
 
 function build_image() {
-    echo "Building Docker image using $DOCKERFILE..."
-    if [ -n "$PLATFORM" ]; then
-        echo "Building for platform: $PLATFORM"
-        docker build --platform $PLATFORM -f $DOCKERFILE -t $IMAGE_NAME .
+    if [ "$USE_PREBUILT" = true ]; then
+        echo "Using pre-built image: $PREBUILT_IMAGE"
+        IMAGE_NAME="$PREBUILT_IMAGE"
+        echo "Pulling image..."
+        if [ -n "$PLATFORM" ]; then
+            docker pull --platform $PLATFORM $PREBUILT_IMAGE
+        else
+            docker pull $PREBUILT_IMAGE
+        fi
     else
-        docker build -f $DOCKERFILE -t $IMAGE_NAME .
+        echo "Building Docker image using $DOCKERFILE..."
+        if [ -n "$PLATFORM" ]; then
+            echo "Building for platform: $PLATFORM"
+            docker build --platform $PLATFORM -f $DOCKERFILE -t $IMAGE_NAME .
+        else
+            docker build -f $DOCKERFILE -t $IMAGE_NAME .
+        fi
     fi
 }
 
@@ -65,6 +80,7 @@ function run_container() {
         -e DISPLAY=$DISPLAY \
         --privileged \
         --network host \
+        $SECURITY_OPTS \
         $run_args \
         $IMAGE_NAME
     echo "Container started. SSH access: ssh root@localhost -p 2222"
@@ -107,9 +123,10 @@ function clean_all() {
 while [[ $# -gt 0 ]]; do
     case $1 in
         --desktop)
-            DOCKERFILE="Dockerfile.desktop"
-            IMAGE_NAME="ros2-bocchi-desktop"
-            CONTAINER_NAME="ros2-bocchi-dev-desktop"
+            USE_PREBUILT=true
+            PREBUILT_IMAGE="ghcr.io/tiryoh/ros2-desktop-vnc:humble"
+            IMAGE_NAME="ghcr.io/tiryoh/ros2-desktop-vnc:humble"
+            SECURITY_OPTS="--security-opt seccomp=unconfined"
             shift
             ;;
         --platform)

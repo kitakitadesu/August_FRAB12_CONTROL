@@ -9,12 +9,13 @@ class WebSocketKeyboardInterface {
         this.pendingRequests = new Map();
         this.requestId = 0;
         
-        // WebSocket configuration
-        this.currentHost = window.location.hostname;
+        // WebSocket configuration - optimized for fast connection
+        this.currentHost = window.location.hostname || 'localhost';
         this.websocketUrl = `ws://${this.currentHost}:8765`;
-        this.reconnectDelay = 5000;
-        this.maxReconnectAttempts = 10;
+        this.reconnectDelay = 2000; // Reduced from 5000ms
+        this.maxReconnectAttempts = 15; // Increased attempts
         this.reconnectAttempts = 0;
+        this.connectionTimeout = 5000; // Add connection timeout
         
         // Status tracking
         this.serverStatus = {
@@ -30,7 +31,22 @@ class WebSocketKeyboardInterface {
     init() {
         this.setupEventListeners();
         this.initializeInterface();
-        this.connectWebSocket();
+        // Connect WebSocket immediately without waiting for window load
+        setTimeout(() => this.connectWebSocket(), 100);
+    }
+
+    initializeInterface() {
+        // Initialize UI elements and status display
+        this.updateConnectionMode();
+        this.addDebugMessage('Initializing WebSocket keyboard interface...');
+        
+        // Set initial status
+        this.updateStatus({
+            running: false,
+            connectedClients: 0,
+            uptime: 0,
+            version: 'connecting...'
+        });
     }
 
     setupEventListeners() {
@@ -54,14 +70,19 @@ class WebSocketKeyboardInterface {
     }
 
     onWindowLoad() {
-        this.addDebugMessage('Page loaded, initializing WebSocket communication...');
-        this.updateConnectionMode();
+        this.addDebugMessage('Page loaded, WebSocket already initializing...');
         
         this.addDebugMessage(`Current host: ${this.currentHost}`);
         this.addDebugMessage(`WebSocket URL: ${this.websocketUrl}`);
         
         // Start periodic status updates once connected
         this.startStatusUpdates();
+        
+        // If not connected yet, try connecting again
+        if (!this.connected && (!this.websocket || this.websocket.readyState === WebSocket.CLOSED)) {
+            this.addDebugMessage('Page loaded but WebSocket not connected, attempting immediate connection...');
+            this.connectWebSocket();
+        }
     }
 
     generateRequestId() {
@@ -291,21 +312,35 @@ class WebSocketKeyboardInterface {
     }
 
     connectWebSocket() {
-        if (this.websocket && this.websocket.readyState === WebSocket.CONNECTING) {
-            return;
+        // Close existing connection if any
+        if (this.websocket && this.websocket.readyState !== WebSocket.CLOSED) {
+            if (this.websocket.readyState === WebSocket.CONNECTING) {
+                this.addDebugMessage('WebSocket already connecting, skipping...');
+                return;
+            }
+            this.websocket.close();
         }
 
         try {
-            this.addDebugMessage(`Connecting to WebSocket: ${this.websocketUrl}`);
+            this.addDebugMessage(`🔌 Connecting to WebSocket: ${this.websocketUrl}`);
             this.websocket = new WebSocket(this.websocketUrl);
+            
+            // Add connection timeout
+            const connectionTimer = setTimeout(() => {
+                if (this.websocket && this.websocket.readyState === WebSocket.CONNECTING) {
+                    this.addDebugMessage('⏰ WebSocket connection timeout, closing and retrying...');
+                    this.websocket.close();
+                }
+            }, this.connectionTimeout);
 
             this.websocket.onopen = (event) => {
-                this.addDebugMessage('WebSocket connection opened - full communication enabled');
+                clearTimeout(connectionTimer); // Clear timeout on successful connection
+                this.addDebugMessage('✅ WebSocket connection opened - full communication enabled');
                 this.connected = true;
                 this.reconnectAttempts = 0;
                 this.updateConnectionMode();
                 
-                // Send initial connection message
+                // Send initial connection message immediately
                 this.sendWebSocketMessage({
                     type: 'client_connected',
                     timestamp: Date.now(),
@@ -313,8 +348,11 @@ class WebSocketKeyboardInterface {
                     client_type: 'web_interface'
                 });
 
-                // Start status updates
-                this.testConnection();
+                // Test connection and get initial status
+                setTimeout(() => {
+                    this.testConnection();
+                    this.getStatus();
+                }, 50);
             };
 
             this.websocket.onmessage = (event) => {
@@ -327,25 +365,37 @@ class WebSocketKeyboardInterface {
             };
 
             this.websocket.onclose = (event) => {
-                this.addDebugMessage(`WebSocket connection closed (code: ${event.code})`);
+                clearTimeout(connectionTimer); // Clear timeout on close
+                this.addDebugMessage(`❌ WebSocket connection closed (code: ${event.code})`);
                 this.connected = false;
                 this.websocket = null;
                 this.updateConnectionMode();
                 
-                // Attempt reconnection
+                // Immediate retry for certain close codes, then progressive delay
                 if (this.reconnectAttempts < this.maxReconnectAttempts) {
                     this.reconnectAttempts++;
-                    this.addDebugMessage(`Reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${this.reconnectDelay/1000}s`);
+                    let delay;
+                    
+                    // Immediate retry for server restart (code 1006) or going away (code 1001)
+                    if (event.code === 1006 || event.code === 1001) {
+                        delay = 100; // Almost immediate
+                    } else {
+                        delay = Math.min(500 * this.reconnectAttempts, this.reconnectDelay); // Progressive delay
+                    }
+                    
+                    this.addDebugMessage(`🔄 Reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms`);
                     setTimeout(() => {
                         this.connectWebSocket();
-                    }, this.reconnectDelay);
+                    }, delay);
                 } else {
-                    this.addDebugMessage('Max reconnection attempts reached. Please refresh the page.');
+                    this.addDebugMessage('❌ Max reconnection attempts reached. Please refresh the page.');
                 }
             };
 
             this.websocket.onerror = (error) => {
-                this.addDebugMessage(`WebSocket connection error: ${error.message || 'Connection failed'}`);
+                this.addDebugMessage(`⚠️ WebSocket connection error: ${error.message || 'Connection failed'}`);
+                this.connected = false;
+                this.updateConnectionMode();
             };
 
         } catch (error) {
@@ -420,6 +470,17 @@ class WebSocketKeyboardInterface {
             'keysHeld': this.heldKeys.size
         };
 
+        // Add LED state if available
+        if (data.ros2 && typeof data.ros2.led_state !== 'undefined') {
+            const ledElement = document.getElementById('ledState');
+            if (ledElement) {
+                const isOn = data.ros2.led_state;
+                ledElement.textContent = isOn ? '💡 ON' : '⚫ OFF';
+                ledElement.style.color = isOn ? '#00aa00' : '#666666';
+                ledElement.style.backgroundColor = isOn ? '#e8f5e8' : '#f5f5f5';
+            }
+        }
+
         for (const [elementId, value] of Object.entries(updates)) {
             const element = document.getElementById(elementId);
             if (element) {
@@ -445,11 +506,13 @@ class WebSocketKeyboardInterface {
 
     getKeyAction(key, keyCode) {
         const actions = {
+            76: '💡 LED Toggle',           // L
             87: '🔼 Moving Forward',      // W
-            83: '🔽 Moving Backward',     // S  
+            83: '🔽 Moving Backward',     // S
             65: '↪️ Turning Left',        // A
             68: '↩️ Turning Right',       // D
-            70: '🔄 Servo Toggle'         // F
+            70: '🔄 Servo Toggle',        // F
+            108: '💡 LED Toggle'          // l
         };
         return actions[keyCode] || '⏹️ Stop Movement';
     }
@@ -524,6 +587,12 @@ class WebSocketKeyboardInterface {
         this.addDebugMessage('Test key sequence completed');
     }
 
+    async toggleLED() {
+        this.addDebugMessage('Toggling LED...');
+        await this.sendKey('L', 76);
+        this.addDebugMessage('LED toggle command sent');
+    }
+
     cleanup() {
         // Clear all held keys
         this.heldKeys.clear();
@@ -578,6 +647,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.getStatus = () => keyboardInterface.getStatus();
     window.clearMessages = () => keyboardInterface.clearMessages();
     window.sendTestKeys = () => keyboardInterface.sendTestKeys();
+    window.toggleLED = () => keyboardInterface.toggleLED();
     
     // Handle manual form submissions
     window.submitManualKey = async (event) => {

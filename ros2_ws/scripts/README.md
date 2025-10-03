@@ -215,6 +215,73 @@ Comprehensive system monitoring with health checks and performance metrics.
 - 📊 Performance metrics
 - 📋 Log file analysis
 
+#### `monitor_nodes.sh` - ROS2 Node Monitor
+Dedicated monitoring script for ROS2 nodes with detailed status information.
+
+**Features:**
+- ✅ Real-time ROS2 node discovery and monitoring
+- ✅ Process resource usage tracking (CPU, memory)
+- ✅ Node publisher/subscriber/service counts
+- ✅ Daemon status monitoring
+- ✅ Node report generation
+- ✅ Continuous and one-shot monitoring
+- ✅ Specific node targeting
+
+**Usage:**
+```bash
+./scripts/monitor_nodes.sh [options]
+```
+
+**Options:**
+- `--continuous` / `-c` - Continuous monitoring mode
+- `--report` / `-r` - Generate node report and exit
+- `--interval` / `-i` - Set monitoring interval in seconds (default: 5)
+- `--node` / `-n` - Monitor specific node (can be used multiple times)
+
+**Examples:**
+```bash
+./scripts/monitor_nodes.sh              # Single check of all nodes
+./scripts/monitor_nodes.sh --continuous # Continuous monitoring
+./scripts/monitor_nodes.sh --node /bocchi/publisher  # Monitor specific node
+./scripts/monitor_nodes.sh --report    # Generate node report
+```
+
+#### `monitor_topics.sh` - ROS2 Topic Monitor
+Dedicated monitoring script for ROS2 topics with detailed information about publishers, subscribers, and data rates.
+
+**Features:**
+- ✅ Real-time ROS2 topic discovery and monitoring
+- ✅ Message type identification
+- ✅ Publisher/subscriber count tracking
+- ✅ Message rate and bandwidth measurement
+- ✅ Topic graph generation (requires Graphviz)
+- ✅ Sample data display option
+- ✅ Topic report generation
+- ✅ Continuous and one-shot monitoring
+- ✅ Specific topic targeting
+
+**Usage:**
+```bash
+./scripts/monitor_topics.sh [options]
+```
+
+**Options:**
+- `--continuous` / `-c` - Continuous monitoring mode
+- `--report` / `-r` - Generate topic report and exit
+- `--graph` / `-g` - Generate topic graph (DOT + PNG) and exit
+- `--data` / `-d` - Show sample topic data in monitoring
+- `--interval` / `-i` - Set monitoring interval in seconds (default: 5)
+- `--topic` / `-t` - Monitor specific topic (can be used multiple times)
+
+**Examples:**
+```bash
+./scripts/monitor_topics.sh              # Single check of all topics
+./scripts/monitor_topics.sh --continuous # Continuous monitoring
+./scripts/monitor_topics.sh --topic /cmd_vel  # Monitor specific topic
+./scripts/monitor_topics.sh --report     # Generate topic report
+./scripts/monitor_topics.sh --graph      # Generate topic graph (DOT + PNG)
+```
+
 ## System Architecture
 
 ### Ports Used
@@ -354,6 +421,8 @@ source install/setup.bash
 - **ROS2 Logs**: `~/.ros/log/`
 - **Application Logs**: `bocchi.log`
 - **Monitor Logs**: `monitor.log`
+- **Node Monitor Logs**: `node_monitor.log`
+- **Topic Monitor Logs**: `topic_monitor.log`
 - **Test Coverage**: `htmlcov/`
 
 ## Script Dependencies

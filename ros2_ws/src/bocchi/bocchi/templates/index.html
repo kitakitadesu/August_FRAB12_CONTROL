@@ -9,25 +9,25 @@ import operator
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ROS2 REST API Keyboard Interface</title>
     
-    <!-- Minimal CSS for responsive behavior only -->
+    <!-- Enhanced CSS with IBM Plex Sans fonts -->
     <link rel="stylesheet" href="/static/css/main.css">
     
     <!-- WebSocket-only communication - no HTMX needed -->
 </head>
 <body>
-    <main style="max-width: 1200px; margin: 0 auto; padding: 1rem;">
+    <main id="main-content">
         
         <!-- Header Section -->
-        <header style="text-align: center; border: 2px solid #333; padding: 1rem; margin-bottom: 1rem;">
+        <header></header>
             <h1>ROS2 REST API Keyboard Interface</h1>
             <p><em>Real-time keyboard input publisher for ROS2</em></p>
         </header>
 
         <!-- Main Content Grid -->
-        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+        <div class="grid-2col">
             
             <!-- Left Column: Primary Interface -->
-            <div style="border: 2px solid #666; padding: 1rem;">
+            <div class="main-panel">
                 
                 <!-- Connection Status -->
                 <section style="border: 1px solid #999; padding: 0.5rem; margin-bottom: 1rem;">
@@ -51,6 +51,12 @@ import operator
                             WebSocket provides real-time keyboard control with lower latency
                         </p>
                     </div>
+                </section>
+
+                <!-- LED Status -->
+                <section style="border: 1px solid #999; padding: 0.5rem; margin-bottom: 1rem;">
+                    <h2 style="margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 0.5rem;">💡 LED Status</h2>
+                    <div id="ledState" style="text-align: center; font-size: 1.5em; font-weight: bold;">Unknown</div>
                 </section>
 
                 <!-- Key Display -->
@@ -86,6 +92,7 @@ import operator
                             <button type="button" onclick="getStatus()">Get Status</button>
                             <button type="button" onclick="clearMessages()">Clear Messages</button>
                             <button type="button" onclick="sendTestKeys()">Send Test Keys</button>
+                            <button type="button" onclick="toggleLED()">Toggle LED</button>
                         </div>
                     </fieldset>
                 </section>
@@ -129,6 +136,11 @@ import operator
                                     <td><code>/servo_position: 0° ↔ 180°</code></td>
                                 </tr>
                                 <tr>
+                                    <td><strong>L</strong></td>
+                                    <td>LED Toggle</td>
+                                    <td><code>/toggle_led: true ↔ false</code></td>
+                                </tr>
+                                <tr>
                                     <td><strong>Other keys</strong></td>
                                     <td>Stop</td>
                                     <td><code>/cmd_vel: all values = 0.0</code></td>
@@ -144,6 +156,8 @@ import operator
                             <dd style="margin-bottom: 0.5rem;"><code>/cmd_vel</code> (geometry_msgs/Twist)</dd>
                             <dt><strong>Servo Topic:</strong></dt>
                             <dd style="margin-bottom: 0.5rem;"><code>/servo_position</code> (std_msgs/Int32)</dd>
+                            <dt><strong>LED Topic:</strong></dt>
+                            <dd style="margin-bottom: 0.5rem;"><code>/toggle_led</code> (std_msgs/Bool)</dd>
                             <dt><strong>Publishing Rate:</strong></dt>
                             <dd>20 Hz (0.05s timer)</dd>
                         </dl>
@@ -153,7 +167,7 @@ import operator
             </div>
 
             <!-- Right Column: Statistics -->
-            <aside style="border: 2px solid #666; padding: 1rem;">
+            <aside></aside>
                 <h2 style="margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 0.5rem;">Real-time Statistics</h2>
                 <div style="border: 1px solid #999; padding: 0.5rem;">
                     <table border="1" cellpadding="8" cellspacing="0" style="width: 100%;">
@@ -192,7 +206,7 @@ import operator
         </div>
 
         <!-- Forms Section -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+        <div class="grid-2col">
             
             <!-- Manual Key Input -->
             <section style="border: 2px solid #666; padding: 1rem;">
@@ -255,7 +269,7 @@ import operator
         </div>
 
         <!-- Information Sections -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+        <div class="grid-3col">
             
             <!-- WebSocket Communication -->
             <section style="border: 2px solid #666; padding: 1rem;">
@@ -463,6 +477,7 @@ import operator
 
     <!-- JavaScript -->
     <script src="/static/js/keyboard.js"></script>
+    <script src="/static/js/ui-enhancements.js"></script>
     
     <script>
     <%text>

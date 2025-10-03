@@ -9,10 +9,10 @@
 
 ### Docker Management Commands
 - `./docker.sh build` - Build the Docker image (default: ros-base)
-- `./docker.sh build --desktop` - Build with ros-desktop image (includes GUI packages)
+- `./docker.sh run --desktop` - Run with ghcr.io/tiryoh/ros2-desktop-vnc:humble (pre-built VNC desktop image)
 - `./docker.sh build --platform linux/amd64` - Build for specific platform (cross-platform support)
 - `./docker.sh run` - Build and run new container (default: ros-base)
-- `./docker.sh run --desktop` - Build and run with ros-desktop image
+- `./docker.sh run --desktop --platform linux/amd64` - Run desktop image for specific platform
 - `./docker.sh run --platform linux/amd64` - Run with specific platform
 - `./docker.sh start` - Start existing container
 - `./docker.sh stop` - Stop container
@@ -30,6 +30,8 @@ Use `./ros2-docker.sh` for all ROS2 operations with automatic environment setup:
 - `./ros2-docker.sh test` - Run tests
 - `./ros2-docker.sh run <package> <node>` - Run a ROS2 node
 - `./ros2-docker.sh launch <package> <launch_file>` - Launch a ROS2 launch file
+- `./ros2-docker.sh monitor-nodes [args]` - Monitor ROS2 nodes
+- `./ros2-docker.sh monitor-topics [args]` - Monitor ROS2 topics
 - `./ros2-docker.sh exec "<command>"` - Execute arbitrary commands
 
 ### Examples
@@ -50,8 +52,18 @@ Use `./ros2-docker.sh` for all ROS2 operations with automatic environment setup:
 ./ros2-docker.sh exec "ros2 node list"
 ./ros2-docker.sh exec "ros2 topic list"
 
+# Monitor ROS2 nodes and topics
+./ros2-docker.sh monitor-nodes
+./ros2-docker.sh monitor-nodes --continuous
+./ros2-docker.sh monitor-topics
+./ros2-docker.sh monitor-topics --report
+
 # Open shell for interactive development
 ./ros2-docker.sh shell
+
+# Run with desktop VNC image (includes GUI tools and VNC)
+# Security options are automatically configured for Ubuntu Jammy compatibility
+./docker.sh run --desktop
 
 # Cross-platform examples (useful for Apple Silicon Macs)
 ./docker.sh build --platform linux/amd64
@@ -77,14 +89,15 @@ The Docker container runs Dropbear SSH server:
 
 ## Container Details
 - **Base Image**: `ros:humble-ros-base` (default, lightweight)
-- **Alternative**: `osrf/ros:humble-desktop` (with `--desktop` flag, includes GUI packages)
+- **Alternative**: `ghcr.io/tiryoh/ros2-desktop-vnc:humble` (with `--desktop` flag, includes GUI packages and VNC)
 - **Working Directory**: `/workdir` (mounted from host)
 - **ROS2 Environment**: Automatically sourced
 - **Privileges**: Full system access for hardware interaction
 
 ### Image Options
 - **Default (ros-base)**: Minimal ROS2 installation, smaller image size, faster builds
-- **Desktop (--desktop)**: Full ROS2 desktop with GUI tools like RViz, Gazebo, rqt
+- **Desktop (--desktop)**: Full ROS2 desktop with VNC support, includes GUI tools like RViz, Gazebo, rqt
+  - **Note**: Requires `--security-opt seccomp=unconfined` flag (Ubuntu Jammy based image)
 - **Platform (--platform)**: Cross-platform support (e.g., `linux/amd64` for Apple Silicon compatibility)
 
 ## Code style

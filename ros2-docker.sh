@@ -47,6 +47,8 @@ function show_help() {
     echo "  test         Run tests"
     echo "  run [node]   Run a ROS2 node"
     echo "  launch [pkg] [launch_file]  Launch a ROS2 launch file"
+    echo "  monitor-nodes [args]  Monitor ROS2 nodes"
+    echo "  monitor-topics [args] Monitor ROS2 topics"
     echo "  status       Check container status"
     echo "  help         Show this help message"
     echo ""
@@ -56,6 +58,10 @@ function show_help() {
     echo "  $0 exec 'colcon list'       # Execute custom command"
     echo "  $0 run bocchi control_node  # Run a specific node"
     echo "  $0 launch bocchi main.launch.py  # Launch a launch file"
+    echo "  $0 monitor-nodes            # Monitor all nodes"
+    echo "  $0 monitor-nodes --continuous # Continuous node monitoring"
+    echo "  $0 monitor-topics           # Monitor all topics"
+    echo "  $0 monitor-topics --report  # Generate topic report"
 }
 
 function check_container() {
@@ -157,15 +163,15 @@ function launch_file() {
 
 function check_status() {
     log_info "Checking container status..."
-    
+
     if docker ps | grep -q "$CONTAINER_NAME"; then
         log_success "Container '$CONTAINER_NAME' is running"
-        
+
         # Show container info
         echo ""
         echo "Container Details:"
         docker ps --filter "name=$CONTAINER_NAME" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-        
+
         # Check ROS2 environment
         echo ""
         log_info "Testing ROS2 environment..."
@@ -174,15 +180,37 @@ function check_status() {
         else
             log_warning "ROS2 environment may have issues"
         fi
-        
+
         # Check workspace
         echo ""
         log_info "Workspace status:"
         docker exec "$CONTAINER_NAME" bash -c "cd /workdir/ros2_ws && ls -la src/ 2>/dev/null || echo 'No src directory found'"
-        
+
     else
         log_warning "Container '$CONTAINER_NAME' is not running"
         log_info "Start it with: ./docker.sh run"
+    fi
+}
+
+function monitor_nodes() {
+    log_info "Running ROS2 node monitor..."
+    shift
+    local args="$*"
+    if has_tty; then
+        docker exec -it "$CONTAINER_NAME" bash -c "$(setup_env_command) && ./scripts/monitor_nodes.sh $args"
+    else
+        docker exec "$CONTAINER_NAME" bash -c "$(setup_env_command) && ./scripts/monitor_nodes.sh $args"
+    fi
+}
+
+function monitor_topics() {
+    log_info "Running ROS2 topic monitor..."
+    shift
+    local args="$*"
+    if has_tty; then
+        docker exec -it "$CONTAINER_NAME" bash -c "$(setup_env_command) && ./scripts/monitor_topics.sh $args"
+    else
+        docker exec "$CONTAINER_NAME" bash -c "$(setup_env_command) && ./scripts/monitor_topics.sh $args"
     fi
 }
 
@@ -218,6 +246,14 @@ case "$1" in
         check_container
         shift
         launch_file "$1" "$2"
+        ;;
+    monitor-nodes)
+        check_container
+        monitor_nodes "$@"
+        ;;
+    monitor-topics)
+        check_container
+        monitor_topics "$@"
         ;;
     status)
         check_status
