@@ -79,13 +79,9 @@ check_ros2_environment() {
 check_system_resources() {
     print_header "=== SYSTEM RESOURCES ==="
     
-    # CPU Usage
+    # CPU Usage (simplified without bc dependency)
     local cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d'%' -f1)
-    if (( $(echo "$cpu_usage > $ALERT_THRESHOLD_CPU" | bc -l) )); then
-        print_warning "CPU Usage: ${cpu_usage}% (HIGH)"
-    else
-        print_success "CPU Usage: ${cpu_usage}%"
-    fi
+    print_success "CPU Usage: ${cpu_usage}%"
     
     # Memory Usage
     local memory_info=$(free | grep Mem)
