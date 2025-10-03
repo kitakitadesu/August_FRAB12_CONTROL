@@ -6,20 +6,25 @@ set -e
 
 CONTAINER_NAME="ros2-bocchi-dev"
 IMAGE_NAME="ros2-bocchi"
+DOCKERFILE="Dockerfile"  # Default to base image
 
 function show_help() {
-    echo "Usage: $0 [COMMAND]"
+    echo "Usage: $0 [COMMAND] [OPTIONS]"
     echo ""
     echo "Commands:"
-    echo "  build    Build the Docker image"
-    echo "  run      Run the container (creates new container)"
-    echo "  start    Start existing container"
-    echo "  stop     Stop the container"
-    echo "  shell    Open a shell in the running container"
-    echo "  ssh      SSH into the container (password: password)"
-    echo "  logs     Show container logs"
-    echo "  clean    Remove container and image"
-    echo "  help     Show this help message"
+    echo "  build [--desktop]    Build the Docker image (default: ros-base, --desktop: ros-desktop)"
+    echo "  run [--desktop]      Run the container (creates new container)"
+    echo "  start                Start existing container"
+    echo "  stop                 Stop the container"
+    echo "  shell                Open a shell in the running container"
+    echo "  ssh                  SSH into the container (password: password)"
+    echo "  logs                 Show container logs"
+    echo "  clean                Remove container and image"
+    echo "  help                 Show this help message"
+    echo ""
+    echo "Options:"
+    echo "  --desktop            Use ros:humble-desktop image (Dockerfile.desktop)"
+    echo "                       Default: ros:humble-ros-base image (Dockerfile)"
     echo ""
     echo "ROS2 Development:"
     echo "  Use ./ros2-docker.sh for ROS2 commands (build, run, shell, etc.)"
@@ -30,8 +35,8 @@ function show_help() {
 }
 
 function build_image() {
-    echo "Building Docker image..."
-    docker build -t $IMAGE_NAME .
+    echo "Building Docker image using $DOCKERFILE..."
+    docker build -f $DOCKERFILE -t $IMAGE_NAME .
 }
 
 function run_container() {
@@ -79,6 +84,13 @@ function clean_all() {
     docker rmi $IMAGE_NAME 2>/dev/null || true
     echo "Cleanup complete."
 }
+
+# Parse options
+if [[ "$2" == "--desktop" || "$1" == "--desktop" ]]; then
+    DOCKERFILE="Dockerfile.desktop"
+    IMAGE_NAME="ros2-bocchi-desktop"
+    CONTAINER_NAME="ros2-bocchi-dev-desktop"
+fi
 
 case "$1" in
     build)
