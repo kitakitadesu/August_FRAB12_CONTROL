@@ -15,6 +15,7 @@ import sys
 import os
 from concurrent.futures import ThreadPoolExecutor
 import queue
+import pytest
 
 # WebSocket functionality (optional dependency)
 try:
@@ -220,23 +221,28 @@ class TestStandaloneWebSocketManager(unittest.TestCase):
         for client in clients[3:]:
             self.assertIn(client, self.ws_manager.connected_clients)
 
-    async def test_broadcast_empty_clients(self):
+    def test_broadcast_empty_clients(self):
         """Test broadcasting with no connected clients"""
-        message = {'type': 'test', 'data': 'hello'}
+        async def _test():
+            message = {'type': 'test', 'data': 'hello'}
+            # Should not raise any exception
+            await self.ws_manager.broadcast(message)
         
-        # Should not raise any exception
-        await self.ws_manager.broadcast(message)
+        run_async_test(_test())
         
-    async def test_broadcast_with_clients(self):
+    def test_broadcast_with_clients(self):
         """Test broadcasting to connected clients"""
-        mock_websocket1 = AsyncMock()
-        mock_websocket2 = AsyncMock()
+        async def _test():
+            mock_websocket1 = AsyncMock()
+            mock_websocket2 = AsyncMock()
+            
+            self.ws_manager.add_client(mock_websocket1)
+            self.ws_manager.add_client(mock_websocket2)
+            
+            message = {'type': 'test', 'data': 'hello'}
+            await self.ws_manager.broadcast(message)
         
-        self.ws_manager.add_client(mock_websocket1)
-        self.ws_manager.add_client(mock_websocket2)
-        
-        message = {'type': 'test', 'data': 'hello'}
-        await self.ws_manager.broadcast(message)
+        run_async_test(_test())
         
         expected_json = json.dumps(message)
         mock_websocket1.send.assert_called_once_with(expected_json)
@@ -410,72 +416,78 @@ class TestWebSocketServer(unittest.TestCase):
             }
             await websocket.send(json.dumps(error_response))
     
-    async def test_websocket_connection(self):
+    def test_websocket_connection(self):
         """Test WebSocket connection establishment"""
-        test_port = 8776
+        async def _test():
+            test_port = 8776
+            
+            # Start test server
+            server = await websockets.serve(self.echo_handler, 'localhost', test_port)
+            
+            try:
+                # Connect to test server
+                async with websockets.connect(f'ws://localhost:{test_port}') as websocket:
+                    # Send test message
+                    test_message = {
+                        'type': 'test_connection',
+                        'data': 'hello server'
+                    }
+                    await websocket.send(json.dumps(test_message))
+                    
+                    # Receive response
+                    response = await websocket.recv()
+                    response_data = json.loads(response)
+                    
+                    self.assertEqual(response_data['type'], 'echo')
+                    self.assertEqual(response_data['original'], test_message)
+                    
+            finally:
+                server.close()
+                await server.wait_closed()
         
-        # Start test server
-        server = await websockets.serve(self.echo_handler, 'localhost', test_port)
-        
-        try:
-            # Connect to test server
-            async with websockets.connect(f'ws://localhost:{test_port}') as websocket:
-                # Send test message
-                test_message = {
-                    'type': 'test_connection',
-                    'data': 'hello server'
-                }
-                await websocket.send(json.dumps(test_message))
-                
-                # Receive response
-                response = await websocket.recv()
-                response_data = json.loads(response)
-                
-                self.assertEqual(response_data['type'], 'echo')
-                self.assertEqual(response_data['original'], test_message)
-                
-        finally:
-            server.close()
-            await server.wait_closed()
+        run_async_test(_test())
     
-    async def test_multiple_connections(self):
+    def test_multiple_connections(self):
         """Test multiple concurrent connections"""
-        test_port = 8777
-        connection_count = 3
-        
-        # Start test server
-        server = await websockets.serve(self.echo_handler, 'localhost', test_port)
-        
-        try:
-            # Create multiple connections
-            connections = []
-            for i in range(connection_count):
-                conn = await websockets.connect(f'ws://localhost:{test_port}')
-                connections.append(conn)
+        async def _test():
+            test_port = 8777
+            connection_count = 3
             
-            # Send messages from all connections
-            for i, conn in enumerate(connections):
-                message = {
-                    'type': 'multi_test',
-                    'client_id': i,
-                    'data': f'message from client {i}'
-                }
-                await conn.send(json.dumps(message))
-                
-                # Receive echo
-                response = await conn.recv()
-                response_data = json.loads(response)
-                
-                self.assertEqual(response_data['type'], 'echo')
-                self.assertEqual(response_data['original']['client_id'], i)
+            # Start test server
+            server = await websockets.serve(self.echo_handler, 'localhost', test_port)
             
-            # Close all connections
-            for conn in connections:
-                await conn.close()
+            try:
+                # Create multiple connections
+                connections = []
+                for i in range(connection_count):
+                    conn = await websockets.connect(f'ws://localhost:{test_port}')
+                    connections.append(conn)
                 
-        finally:
-            server.close()
-            await server.wait_closed()
+                # Send messages from all connections
+                for i, conn in enumerate(connections):
+                    message = {
+                        'type': 'multi_test',
+                        'client_id': i,
+                        'data': f'message from client {i}'
+                    }
+                    await conn.send(json.dumps(message))
+                    
+                    # Receive echo
+                    response = await conn.recv()
+                    response_data = json.loads(response)
+                    
+                    self.assertEqual(response_data['type'], 'echo')
+                    self.assertEqual(response_data['original']['client_id'], i)
+                
+                # Close all connections
+                for conn in connections:
+                    await conn.close()
+                    
+            finally:
+                server.close()
+                await server.wait_closed()
+        
+        run_async_test(_test())
 
 
 class TestPerformance(unittest.TestCase):
