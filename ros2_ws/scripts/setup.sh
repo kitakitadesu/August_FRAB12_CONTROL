@@ -463,7 +463,7 @@ show_final_instructions() {
     echo ""
     
     print_header "🌐 SYSTEM ACCESS:"
-    echo "  • Web Interface: http://localhost:8000"
+    echo "  • Web Interface: http://localhost:5000"
     echo "  • REST API: http://localhost:5000"
     echo "  • WebSocket: ws://localhost:8765"
     echo ""

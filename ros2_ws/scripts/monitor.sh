@@ -168,7 +168,7 @@ check_service_endpoints() {
     fi
     
     # Check web interface
-    if curl -s -f http://localhost:8000 >/dev/null 2>&1; then
+    if curl -s -f http://localhost:5000 >/dev/null 2>&1; then
         print_success "Web Interface: ACCESSIBLE"
     else
         print_error "Web Interface: INACCESSIBLE"
@@ -314,7 +314,7 @@ generate_health_report() {
         echo "Publisher: $(pgrep -f "bocchi.*publisher" >/dev/null && echo "Running" || echo "Stopped")"
         echo "REST API: $(curl -s -f http://localhost:5000/api/status >/dev/null 2>&1 && echo "Active" || echo "Inactive")"
         echo "WebSocket: $(nc -z localhost 8765 2>/dev/null && echo "Listening" || echo "Not Listening")"
-        echo "Web UI: $(curl -s -f http://localhost:8000 >/dev/null 2>&1 && echo "Accessible" || echo "Inaccessible")"
+        echo "Web UI: $(curl -s -f http://localhost:5000 >/dev/null 2>&1 && echo "Accessible" || echo "Inaccessible")"
         
     } > "$report_file"
     

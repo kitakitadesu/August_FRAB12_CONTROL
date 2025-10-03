@@ -184,7 +184,7 @@ print_system "🤖 BOCCHI ROBOT CONTROLLER SYSTEM"
 print_system "================================================================="
 echo "  🏗️  Build Type: $([ "$DEV_MODE" = true ] && echo "Development" || echo "Production")"
 echo "  📍 Workspace: $(pwd)"
-echo "  🌐 Web Interface: http://localhost:8000"
+echo "  🌐 Web Interface: http://localhost:5000"
 echo "  📡 REST API: http://localhost:5000"
 echo "  🔗 WebSocket: ws://localhost:8765"
 echo "  📊 Demo Mode: $([ "$DEMO_MODE" = true ] && echo "Enabled" || echo "Disabled")"
@@ -244,7 +244,7 @@ done
 
 # Check web interface
 for i in {1..10}; do
-    if curl -s http://localhost:8000 >/dev/null 2>&1; then
+    if curl -s http://localhost:5000 >/dev/null 2>&1; then
         print_success "✅ Web interface is ready"
         break
     fi
@@ -261,14 +261,14 @@ if command -v ip >/dev/null 2>&1; then
     LOCAL_IPS=$(ip route get 8.8.8.8 2>/dev/null | awk '{print $7; exit}' 2>/dev/null || echo "localhost")
     if [ "$LOCAL_IPS" != "localhost" ]; then
         echo "  🌍 External Access:"
-        echo "    • Web Interface: http://$LOCAL_IPS:8000"
+        echo "    • Web Interface: http://$LOCAL_IPS:5000"
         echo "    • REST API: http://$LOCAL_IPS:5000"
         echo "    • WebSocket: ws://$LOCAL_IPS:8765"
     fi
 fi
 
 echo "  🏠 Local Access:"
-echo "    • Web Interface: http://localhost:8000"
+echo "    • Web Interface: http://localhost:5000"
 echo "    • REST API: http://localhost:5000"
 echo "    • WebSocket: ws://localhost:8765"
 
@@ -278,15 +278,15 @@ if [ "$HEADLESS" = false ]; then
     
     # Try different browsers
     if command -v xdg-open >/dev/null 2>&1; then
-        xdg-open http://localhost:8000 >/dev/null 2>&1 &
+        xdg-open http://localhost:5000 >/dev/null 2>&1 &
     elif command -v open >/dev/null 2>&1; then
-        open http://localhost:8000 >/dev/null 2>&1 &
+        open http://localhost:5000 >/dev/null 2>&1 &
     elif command -v firefox >/dev/null 2>&1; then
-        firefox http://localhost:8000 >/dev/null 2>&1 &
+        firefox http://localhost:5000 >/dev/null 2>&1 &
     elif command -v chromium-browser >/dev/null 2>&1; then
-        chromium-browser http://localhost:8000 >/dev/null 2>&1 &
+        chromium-browser http://localhost:5000 >/dev/null 2>&1 &
     else
-        print_warning "No web browser found. Please open http://localhost:8000 manually"
+        print_warning "No web browser found. Please open http://localhost:5000 manually"
     fi
 fi
 
@@ -319,7 +319,7 @@ print_success "🎉 BOCCHI SYSTEM IS READY!"
 print_success "================================================================="
 echo ""
 echo "  🎮 Control Methods:"
-echo "    • Web Interface: Open http://localhost:8000 in your browser"
+echo "    • Web Interface: Open http://localhost:5000 in your browser"
 echo "    • WASD Keys: W=Forward, S=Backward, A=Left, D=Right"
 echo "    • F Key: Toggle servo position (0° ↔ 180°)"
 echo ""
