@@ -86,7 +86,7 @@ jobs:
         if [ -f requirements.txt ]; then
           pip3 install -r requirements.txt
         fi
-        pip3 install websockets flask flask-cors requests mako pytest-cov
+        pip3 install "Flask==2.3.3" "Flask-CORS==4.0.0" "Werkzeug==2.3.7" "websockets==11.0.3" "requests==2.31.0" "Mako==1.2.4" pytest-cov
         
     - name: Install ROS2 dependencies
       run: |
@@ -216,7 +216,7 @@ jobs:
         cd workdir/ros2_ws
         ./scripts/setup.sh --ci
         pip3 install -r src/bocchi/requirements.txt || true
-        pip3 install websockets flask flask-cors requests mako
+        pip3 install "Flask==2.3.3" "Flask-CORS==4.0.0" "Werkzeug==2.3.7" "websockets==11.0.3" "requests==2.31.0" "Mako==1.2.4"
         rosdep update
         rosdep install --from-paths src/bocchi --ignore-src -r -y
         ./scripts/build.sh
@@ -313,7 +313,7 @@ jobs:
         cd workdir/ros2_ws
         ./scripts/setup.sh --ci
         pip3 install -r src/bocchi/requirements.txt || true
-        pip3 install websockets flask flask-cors requests mako
+        pip3 install "Flask==2.3.3" "Flask-CORS==4.0.0" "Werkzeug==2.3.7" "websockets==11.0.3" "requests==2.31.0" "Mako==1.2.4"
         rosdep update
         rosdep install --from-paths src/bocchi --ignore-src -r -y
         ./scripts/build.sh
