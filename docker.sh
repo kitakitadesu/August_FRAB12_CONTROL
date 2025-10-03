@@ -7,13 +7,14 @@ set -e
 CONTAINER_NAME="ros2-bocchi-dev"
 IMAGE_NAME="ros2-bocchi"
 DOCKERFILE="Dockerfile"  # Default to base image
+PLATFORM=""  # Default to native platform
 
 function show_help() {
     echo "Usage: $0 [COMMAND] [OPTIONS]"
     echo ""
     echo "Commands:"
-    echo "  build [--desktop]    Build the Docker image (default: ros-base, --desktop: ros-desktop)"
-    echo "  run [--desktop]      Run the container (creates new container)"
+    echo "  build [--desktop] [--platform]    Build the Docker image (default: ros-base, --desktop: ros-desktop)"
+    echo "  run [--desktop] [--platform]      Run the container (creates new container)"
     echo "  start                Start existing container"
     echo "  stop                 Stop the container"
     echo "  shell                Open a shell in the running container"
@@ -25,6 +26,8 @@ function show_help() {
     echo "Options:"
     echo "  --desktop            Use ros:humble-desktop image (Dockerfile.desktop)"
     echo "                       Default: ros:humble-ros-base image (Dockerfile)"
+    echo "  --platform           Build for specific platform (e.g., --platform linux/amd64)"
+    echo "                       Default: native platform"
     echo ""
     echo "ROS2 Development:"
     echo "  Use ./ros2-docker.sh for ROS2 commands (build, run, shell, etc.)"
@@ -36,11 +39,20 @@ function show_help() {
 
 function build_image() {
     echo "Building Docker image using $DOCKERFILE..."
-    docker build -f $DOCKERFILE -t $IMAGE_NAME .
+    if [ -n "$PLATFORM" ]; then
+        echo "Building for platform: $PLATFORM"
+        docker build --platform $PLATFORM -f $DOCKERFILE -t $IMAGE_NAME .
+    else
+        docker build -f $DOCKERFILE -t $IMAGE_NAME .
+    fi
 }
 
 function run_container() {
     echo "Running new container..."
+    local run_args=""
+    if [ -n "$PLATFORM" ]; then
+        run_args="--platform $PLATFORM"
+    fi
     docker run -d \
         --name $CONTAINER_NAME \
         -v "$(pwd):/workdir" \
@@ -48,6 +60,7 @@ function run_container() {
         -e DISPLAY=$DISPLAY \
         --privileged \
         --network host \
+        $run_args \
         $IMAGE_NAME
     echo "Container started. SSH access: ssh root@localhost -p 2222"
 }
@@ -86,11 +99,20 @@ function clean_all() {
 }
 
 # Parse options
-if [[ "$2" == "--desktop" || "$1" == "--desktop" ]]; then
-    DOCKERFILE="Dockerfile.desktop"
-    IMAGE_NAME="ros2-bocchi-desktop"
-    CONTAINER_NAME="ros2-bocchi-dev-desktop"
-fi
+for arg in "$@"; do
+    case $arg in
+        --desktop)
+            DOCKERFILE="Dockerfile.desktop"
+            IMAGE_NAME="ros2-bocchi-desktop"
+            CONTAINER_NAME="ros2-bocchi-dev-desktop"
+            ;;
+        --platform)
+            # Get the next argument as platform value
+            shift
+            PLATFORM="$1"
+            ;;
+    esac
+done
 
 case "$1" in
     build)
