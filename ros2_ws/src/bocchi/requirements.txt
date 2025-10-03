@@ -1,6 +1,7 @@
 # REST API and WebSocket dependencies
-Flask==2.0.3
-Flask-CORS==3.0.10
+Flask==2.3.3
+Flask-CORS==4.0.0
+Werkzeug==2.3.7
 websockets==11.0.3
-requests==2.25.1
-Mako==1.1.6
+requests==2.31.0
+Mako==1.2.4
