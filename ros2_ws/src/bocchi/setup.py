@@ -26,6 +26,7 @@ setup(
         'setuptools',
         'Flask==2.0.3',
         'Flask-CORS==3.0.10',
+        'websockets==11.0.3',
         'requests==2.25.1',
         'sseclient-py==1.8.0',
         'Mako==1.1.6'
@@ -35,7 +36,8 @@ setup(
     maintainer_email='bookshorse@outlook.jp',
     description='keyboard publisher',
     license='MIT',
-    tests_require=['pytest'],
+    tests_require=['pytest', 'websockets', 'pytest-asyncio', 'pytest-cov'],
+    test_suite='pytest',
     entry_points={
         'console_scripts': [
             'publisher = bocchi.publisher:main',
