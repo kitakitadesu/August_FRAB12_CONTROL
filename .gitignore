@@ -51,4 +51,4 @@ Thumbs.db
 *.egg-info/
 dist/
 .coverage
-htmlcov/
+htmlcov/ros2_ws/health_report_*.txt
