@@ -217,10 +217,12 @@ class KeyboardAPI:
         self.server_start_time = time.time()
         self.network_cache = NetworkInfoCache(cache_duration=30)
         self.websocket_manager = WebSocketManager()
+        self.key_state_manager = KeyStateManager()
 
         # Setup Mako template lookup
         template_dir = os.path.join(os.path.dirname(__file__), 'templates')
         static_dir = os.path.join(os.path.dirname(__file__), 'static')
+        
         self.template_lookup = TemplateLookup(
             directories=[template_dir],
             imports=['import builtins', 'import operator'],
@@ -272,14 +274,14 @@ class KeyboardAPI:
                 context = {
                     'timestamp': int(time.time() * 1000),
                     'server_status': 'Running',
-                    'connected_clients': self.connected_clients,
+                    'connected_clients': len(self.websocket_manager.connected_clients),
                     'uptime': int(time.time() - self.server_start_time),
                     'version': '1.0.0',
                     'current_host': network_info.get('hostname', 'localhost'),
                     'current_url': request.url,
                     'protocol': request.scheme,
                     'api_base': f"http://{network_info.get('hostname', 'localhost')}:5000",
-                    'web_url': f"http://{network_info.get('hostname', 'localhost')}:8000",
+                    'web_url': f"http://{network_info.get('hostname', 'localhost')}:5000",
                     'available_ips': ','.join(network_info.get('ips', ['localhost'])),
                     'server_info': 'ROS2 REST API Keyboard Interface'
                 }
@@ -301,7 +303,7 @@ class KeyboardAPI:
                 uptime = int(time.time() - self.server_start_time)
                 status_data = {
                     'server_running': True,
-                    'connected_clients': self.connected_clients,
+                    'connected_clients': len(self.websocket_manager.connected_clients),
                     'version': '1.0.0',
                     'uptime': uptime,
                     'timestamp': int(time.time() * 1000)
@@ -314,7 +316,7 @@ class KeyboardAPI:
                         context = {
                             'status_class': 'connected',
                             'server_running': True,
-                            'connected_clients': self.connected_clients,
+                            'connected_clients': len(self.websocket_manager.connected_clients),
                             'uptime': uptime,
                             'version': '1.0.0',
                             'error_message': None
@@ -556,7 +558,7 @@ class KeyboardAPI:
                 return jsonify({
                     'success': True,
                     'websocket_url': 'ws://localhost:8765',
-                    'connected_clients': connected_count,
+                    'connected_clients': len(self.websocket_manager.connected_clients),
                     'server_start_time': self.server_start_time,
                     'uptime_seconds': int(time.time() - self.server_start_time),
                     'timestamp': int(time.time() * 1000)
@@ -626,6 +628,7 @@ class MinimalPublisher(Node):
         self.key_manager = KeyStateManager(debounce_time=0.02)
         self.network_cache = NetworkInfoCache(cache_duration=60)
         self.flask_app = None
+        self.api_handler = None
         self.websocket_server = None
 
         # Check if ports are available
@@ -639,12 +642,12 @@ class MinimalPublisher(Node):
         print("ROS2 REST API Keyboard Interface Started")
         print("=" * 50)
         print("Services started on all network interfaces (0.0.0.0):")
-        print(f"  Web interface: http://localhost:8000")
+        print(f"  Web interface: http://localhost:5000")
         print(f"  REST API: http://localhost:5000")
         print(f"  WebSocket: ws://localhost:8765")
         print("")
         print("Network access URLs (replace <your-ip> with actual IP):")
-        print(f"  Web interface: http://<your-ip>:8000")
+        print(f"  Web interface: http://<your-ip>:5000")
         print(f"  REST API: http://<your-ip>:5000")
         print(f"  WebSocket: ws://<your-ip>:8765")
         print("")
@@ -668,8 +671,7 @@ class MinimalPublisher(Node):
             except socket.error:
                 return False
 
-        if not is_port_available(8000):
-            print("WARNING: Port 8000 is already in use. HTTP server may not start.")
+        # Port 8000 is not used - web interface runs on port 5000
         if not is_port_available(5000):
             print("WARNING: Port 5000 is already in use. REST API server may not start.")
         if not is_port_available(8765):
@@ -690,7 +692,7 @@ class MinimalPublisher(Node):
                 print("\nAccess URLs:")
                 for ip in available_ips:
                     if ip != '127.0.0.1':
-                        print(f"  Web interface: http://{ip}:8000")
+                        print(f"  Web interface: http://{ip}:5000")
                         print(f"  REST API: http://{ip}:5000")
                         print(f"  WebSocket: ws://{ip}:8765")
                         print()
@@ -718,6 +720,7 @@ class MinimalPublisher(Node):
                 api_handler = KeyboardAPI(self)
                 self.flask_app = api_handler.app
                 self.flask_app.config['api_handler'] = api_handler
+                self.api_handler = api_handler
 
                 # Ensure HTML file is created (for backwards compatibility)
                 self.create_html_file()
@@ -759,7 +762,9 @@ class MinimalPublisher(Node):
                 
                 async def handle_websocket(websocket, path):
                     """Handle WebSocket connections"""
-                    self.flask_app.config['api_handler'].websocket_manager.add_client(websocket)
+                    api_handler = self.api_handler or (self.flask_app.config.get('api_handler') if self.flask_app else None)
+                    if api_handler:
+                        api_handler.websocket_manager.add_client(websocket)
                     client_address = websocket.remote_address
                     print(f"WebSocket client connected from {client_address}")
                     
@@ -777,8 +782,38 @@ class MinimalPublisher(Node):
                             try:
                                 data = json.loads(message)
                                 print(f"Received WebSocket message: {data}")
-                                # Handle any client-side messages if needed
+                                
+                                # Handle different message types
+                                message_type = data.get('type')
+                                
+                                if message_type == 'keyboard':
+                                    await self.handle_websocket_keyboard_input(data, websocket)
+                                elif message_type == 'key_down':
+                                    await self.handle_websocket_key_down(data, websocket)
+                                elif message_type == 'key_up':
+                                    await self.handle_websocket_key_up(data, websocket)
+                                elif message_type == 'get_status':
+                                    await self.handle_websocket_status_request(data, websocket)
+                                elif message_type == 'test_connection':
+                                    await self.handle_websocket_test_connection(data, websocket)
+                                elif message_type == 'send_key':
+                                    await self.handle_websocket_send_key(data, websocket)
+                                elif message_type == 'send_key_batch':
+                                    await self.handle_websocket_send_key_batch(data, websocket)
+                                elif message_type == 'get_routes':
+                                    await self.handle_websocket_get_routes(data, websocket)
+                                elif message_type == 'client_connected':
+                                    print(f"Client connected: {data.get('client', 'unknown')}")
+                                else:
+                                    await self.handle_websocket_unknown_message(data, websocket)
+                                    
                             except json.JSONDecodeError:
+                                error_response = {
+                                    'type': 'error',
+                                    'message': 'Invalid JSON format',
+                                    'timestamp': int(time.time() * 1000)
+                                }
+                                await websocket.send(json.dumps(error_response))
                                 print(f"Invalid JSON received from WebSocket client")
                                 
                     except websockets.exceptions.ConnectionClosed:
@@ -786,7 +821,9 @@ class MinimalPublisher(Node):
                     except Exception as e:
                         print(f"WebSocket error: {e}")
                     finally:
-                        self.flask_app.config['api_handler'].websocket_manager.remove_client(websocket)
+                        api_handler = self.api_handler or (self.flask_app.config.get('api_handler') if self.flask_app else None)
+                        if api_handler:
+                            api_handler.websocket_manager.remove_client(websocket)
                 
                 async def start_server():
                     try:
@@ -817,6 +854,465 @@ class MinimalPublisher(Node):
         # Give the WebSocket server time to start
         print("Waiting for WebSocket server to initialize...")
         time.sleep(1)
+
+    async def handle_websocket_keyboard_input(self, data, websocket):
+        """Handle keyboard input received via WebSocket"""
+        try:
+            key = data.get('key', '')
+            key_code = data.get('key_code', 0)
+            is_held = data.get('is_held', False)
+            timestamp = data.get('timestamp', int(time.time() * 1000))
+            request_id = data.get('request_id')
+            
+            # Process the key input using the existing key state manager
+            api_handler = self.api_handler or (self.flask_app.config.get('api_handler') if self.flask_app else None)
+            if not api_handler:
+                raise Exception("API handler not available")
+            
+            # Update key state
+            should_publish = api_handler.key_state_manager.update_key(key_code, True)
+            
+            response_data = {
+                'type': 'keyboard_response',
+                'success': True,
+                'key': key,
+                'key_code': key_code,
+                'is_held': is_held,
+                'timestamp': timestamp,
+                'published': should_publish
+            }
+            
+            if request_id:
+                response_data['request_id'] = request_id
+            
+            if should_publish:
+                # Publish ROS2 messages based on key
+                self.process_key_input(key, key_code)
+                
+                # Broadcast the key event to all WebSocket clients
+                event_data = {
+                    'type': 'key_event',
+                    'key': key,
+                    'key_code': key_code,
+                    'is_held': is_held,
+                    'timestamp': timestamp,
+                    'action': 'pressed'
+                }
+                
+                # Schedule async broadcast
+                api_handler._schedule_broadcast(event_data)
+                
+                print(f"WebSocket keyboard input processed: {key} ({key_code})")
+            
+            # Send response back to requesting client
+            await websocket.send(json.dumps(response_data))
+                
+        except Exception as e:
+            error_response = {
+                'type': 'keyboard_response',
+                'success': False,
+                'error': str(e),
+                'timestamp': int(time.time() * 1000)
+            }
+            if data.get('request_id'):
+                error_response['request_id'] = data.get('request_id')
+            await websocket.send(json.dumps(error_response))
+            print(f"Error handling WebSocket keyboard input: {e}")
+
+    async def handle_websocket_key_down(self, data, websocket):
+        """Handle key down event received via WebSocket"""
+        try:
+            key = data.get('key', '')
+            key_code = data.get('key_code', 0)
+            timestamp = data.get('timestamp', int(time.time() * 1000))
+            request_id = data.get('request_id')
+            
+            # Process key down
+            api_handler = self.api_handler or (self.flask_app.config.get('api_handler') if self.flask_app else None)
+            if not api_handler:
+                raise Exception("API handler not available")
+            should_publish = api_handler.key_state_manager.update_key(key_code, True)
+            
+            response_data = {
+                'type': 'key_down_response',
+                'success': True,
+                'key': key,
+                'key_code': key_code,
+                'timestamp': timestamp,
+                'published': should_publish
+            }
+            
+            if request_id:
+                response_data['request_id'] = request_id
+            
+            if should_publish:
+                self.process_key_input(key, key_code)
+                
+                # Broadcast key down event
+                event_data = {
+                    'type': 'key_down_event',
+                    'key': key,
+                    'key_code': key_code,
+                    'timestamp': timestamp
+                }
+                api_handler._schedule_broadcast(event_data)
+                
+                print(f"WebSocket key down: {key} ({key_code})")
+            
+            # Send response back to requesting client
+            await websocket.send(json.dumps(response_data))
+                
+        except Exception as e:
+            error_response = {
+                'type': 'key_down_response',
+                'success': False,
+                'error': str(e),
+                'timestamp': int(time.time() * 1000)
+            }
+            if data.get('request_id'):
+                error_response['request_id'] = data.get('request_id')
+            await websocket.send(json.dumps(error_response))
+            print(f"Error handling WebSocket key down: {e}")
+
+    async def handle_websocket_key_up(self, data, websocket):
+        """Handle key up event received via WebSocket"""
+        try:
+            key = data.get('key', '')
+            key_code = data.get('key_code', 0)
+            timestamp = data.get('timestamp', int(time.time() * 1000))
+            request_id = data.get('request_id')
+            
+            # Process key up (release)
+            api_handler = self.api_handler or (self.flask_app.config.get('api_handler') if self.flask_app else None)
+            if not api_handler:
+                raise Exception("API handler not available")
+            should_publish = api_handler.key_state_manager.update_key(key_code, False)
+            
+            response_data = {
+                'type': 'key_up_response',
+                'success': True,
+                'key': key,
+                'key_code': key_code,
+                'timestamp': timestamp,
+                'published': should_publish
+            }
+            
+            if request_id:
+                response_data['request_id'] = request_id
+            
+            if should_publish:
+                # Publish stop command or update movement based on remaining keys
+                self.process_key_release(key, key_code)
+                
+                # Broadcast key up event
+                event_data = {
+                    'type': 'key_up_event',
+                    'key': key,
+                    'key_code': key_code,
+                    'timestamp': timestamp
+                }
+                api_handler._schedule_broadcast(event_data)
+                
+                print(f"WebSocket key up: {key} ({key_code})")
+            
+            # Send response back to requesting client
+            await websocket.send(json.dumps(response_data))
+                
+        except Exception as e:
+            error_response = {
+                'type': 'key_up_response',
+                'success': False,
+                'error': str(e),
+                'timestamp': int(time.time() * 1000)
+            }
+            if data.get('request_id'):
+                error_response['request_id'] = data.get('request_id')
+            await websocket.send(json.dumps(error_response))
+            print(f"Error handling WebSocket key up: {e}")
+
+    async def handle_websocket_status_request(self, data, websocket):
+        """Handle status request via WebSocket"""
+        try:
+            request_id = data.get('request_id')
+            api_handler = self.api_handler or (self.flask_app.config.get('api_handler') if self.flask_app else None)
+            if not api_handler:
+                raise Exception("API handler not available")
+            
+            # Get current status
+            uptime = int(time.time() - api_handler.server_start_time)
+            status_data = {
+                'type': 'status_response',
+                'success': True,
+                'data': {
+                    'server_running': True,
+                    'connected_clients': len(api_handler.websocket_manager.connected_clients),
+                    'version': '1.0.0',
+                    'uptime': uptime,
+                    'timestamp': int(time.time() * 1000),
+                    'websocket_mode': True
+                },
+                'timestamp': int(time.time() * 1000)
+            }
+            
+            if request_id:
+                status_data['request_id'] = request_id
+                
+            await websocket.send(json.dumps(status_data))
+            
+        except Exception as e:
+            error_response = {
+                'type': 'status_response',
+                'success': False,
+                'error': str(e),
+                'timestamp': int(time.time() * 1000)
+            }
+            if data.get('request_id'):
+                error_response['request_id'] = data.get('request_id')
+            await websocket.send(json.dumps(error_response))
+
+    async def handle_websocket_test_connection(self, data, websocket):
+        """Handle connection test via WebSocket"""
+        try:
+            request_id = data.get('request_id')
+            
+            response_data = {
+                'type': 'test_connection_response',
+                'success': True,
+                'message': 'WebSocket connection is working perfectly',
+                'server_time': int(time.time() * 1000),
+                'client_time': data.get('timestamp', 0),
+                'latency_ms': int(time.time() * 1000) - data.get('timestamp', 0),
+                'timestamp': int(time.time() * 1000)
+            }
+            
+            if request_id:
+                response_data['request_id'] = request_id
+                
+            await websocket.send(json.dumps(response_data))
+            
+        except Exception as e:
+            error_response = {
+                'type': 'test_connection_response',
+                'success': False,
+                'error': str(e),
+                'timestamp': int(time.time() * 1000)
+            }
+            if data.get('request_id'):
+                error_response['request_id'] = data.get('request_id')
+            await websocket.send(json.dumps(error_response))
+
+    async def handle_websocket_send_key(self, data, websocket):
+        """Handle single key send via WebSocket"""
+        try:
+            key = data.get('key', '')
+            key_code = data.get('key_code', 0)
+            is_held = data.get('is_held', False)
+            request_id = data.get('request_id')
+            
+            # Use existing keyboard input handler
+            await self.handle_websocket_keyboard_input(data, websocket)
+            
+        except Exception as e:
+            error_response = {
+                'type': 'send_key_response',
+                'success': False,
+                'error': str(e),
+                'timestamp': int(time.time() * 1000)
+            }
+            if data.get('request_id'):
+                error_response['request_id'] = data.get('request_id')
+            await websocket.send(json.dumps(error_response))
+
+    async def handle_websocket_send_key_batch(self, data, websocket):
+        """Handle batch key send via WebSocket"""
+        try:
+            keys_input = data.get('keys_input', '')
+            request_id = data.get('request_id')
+            
+            # Parse key batch (format: key1:code1,key2:code2)
+            processed_keys = []
+            if keys_input:
+                for key_pair in keys_input.split(','):
+                    if ':' in key_pair:
+                        key, code_str = key_pair.strip().split(':', 1)
+                        try:
+                            key_code = int(code_str)
+                            processed_keys.append({'key': key, 'key_code': key_code})
+                        except ValueError:
+                            continue
+            
+            # Process each key
+            for key_data in processed_keys:
+                key_msg = {
+                    'type': 'keyboard',
+                    'key': key_data['key'],
+                    'key_code': key_data['key_code'],
+                    'is_held': False,
+                    'timestamp': int(time.time() * 1000)
+                }
+                await self.handle_websocket_keyboard_input(key_msg, websocket)
+            
+            response_data = {
+                'type': 'send_key_batch_response',
+                'success': True,
+                'processed_count': len(processed_keys),
+                'keys': processed_keys,
+                'timestamp': int(time.time() * 1000)
+            }
+            
+            if request_id:
+                response_data['request_id'] = request_id
+                
+            await websocket.send(json.dumps(response_data))
+            
+        except Exception as e:
+            error_response = {
+                'type': 'send_key_batch_response',
+                'success': False,
+                'error': str(e),
+                'timestamp': int(time.time() * 1000)
+            }
+            if data.get('request_id'):
+                error_response['request_id'] = data.get('request_id')
+            await websocket.send(json.dumps(error_response))
+
+    async def handle_websocket_get_routes(self, data, websocket):
+        """Handle route information request via WebSocket"""
+        try:
+            request_id = data.get('request_id')
+            
+            # Get Flask routes for compatibility
+            api_handler = self.flask_app.config['api_handler']
+            routes = []
+            for rule in api_handler.app.url_map.iter_rules():
+                routes.append({
+                    'rule': rule.rule,
+                    'endpoint': rule.endpoint,
+                    'methods': list(rule.methods)
+                })
+            
+            response_data = {
+                'type': 'routes_response',
+                'success': True,
+                'routes': routes,
+                'websocket_enabled': True,
+                'timestamp': int(time.time() * 1000)
+            }
+            
+            if request_id:
+                response_data['request_id'] = request_id
+                
+            await websocket.send(json.dumps(response_data))
+            
+        except Exception as e:
+            error_response = {
+                'type': 'routes_response',
+                'success': False,
+                'error': str(e),
+                'timestamp': int(time.time() * 1000)
+            }
+            if data.get('request_id'):
+                error_response['request_id'] = data.get('request_id')
+            await websocket.send(json.dumps(error_response))
+
+    async def handle_websocket_unknown_message(self, data, websocket):
+        """Handle unknown message type"""
+        try:
+            request_id = data.get('request_id')
+            message_type = data.get('type', 'unknown')
+            
+            response_data = {
+                'type': 'error',
+                'success': False,
+                'error': f'Unknown message type: {message_type}',
+                'received_type': message_type,
+                'timestamp': int(time.time() * 1000)
+            }
+            
+            if request_id:
+                response_data['request_id'] = request_id
+                
+            await websocket.send(json.dumps(response_data))
+            print(f"Unknown WebSocket message type: {message_type}")
+            
+        except Exception as e:
+            print(f"Error handling unknown WebSocket message: {e}")
+
+    def process_key_input(self, key, key_code):
+        """Process key input and publish appropriate ROS2 messages"""
+        try:
+            # Movement keys
+            if key_code == 87:  # W - Forward
+                self.publish_twist(0.5, 0.0, 0.0, 0.0, 0.0, 0.0)
+            elif key_code == 83:  # S - Backward  
+                self.publish_twist(-0.5, 0.0, 0.0, 0.0, 0.0, 0.0)
+            elif key_code == 65:  # A - Turn Left
+                self.publish_twist(0.0, 0.0, 0.0, 0.0, 0.0, 0.5)
+            elif key_code == 68:  # D - Turn Right
+                self.publish_twist(0.0, 0.0, 0.0, 0.0, 0.0, -0.5)
+            elif key_code == 70:  # F - Servo toggle
+                api_handler = self.api_handler or (self.flask_app.config.get('api_handler') if self.flask_app else None)
+                if not api_handler:
+                    return
+                servo_pos = api_handler.key_state_manager.servo_position
+                self.publish_servo(servo_pos)
+            else:
+                # Stop movement for other keys
+                self.publish_twist(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+                
+        except Exception as e:
+            print(f"Error processing key input: {e}")
+
+    def process_key_release(self, key, key_code):
+        """Process key release and update robot movement"""
+        try:
+            api_handler = self.api_handler or (self.flask_app.config.get('api_handler') if self.flask_app else None)
+            if not api_handler:
+                return
+            current_keys = api_handler.key_state_manager.current_keys
+            
+            # Determine movement based on remaining pressed keys
+            linear_x = 0.0
+            angular_z = 0.0
+            
+            if 87 in current_keys:  # W still pressed
+                linear_x = 0.5
+            elif 83 in current_keys:  # S still pressed
+                linear_x = -0.5
+                
+            if 65 in current_keys:  # A still pressed
+                angular_z = 0.5
+            elif 68 in current_keys:  # D still pressed
+                angular_z = -0.5
+                
+            # Publish updated movement
+            self.publish_twist(linear_x, 0.0, 0.0, 0.0, 0.0, angular_z)
+            
+        except Exception as e:
+            print(f"Error processing key release: {e}")
+
+    def publish_twist(self, linear_x, linear_y, linear_z, angular_x, angular_y, angular_z):
+        """Publish Twist message to cmd_vel topic"""
+        try:
+            msg = Twist()
+            msg.linear.x = linear_x
+            msg.linear.y = linear_y
+            msg.linear.z = linear_z
+            msg.angular.x = angular_x
+            msg.angular.y = angular_y
+            msg.angular.z = angular_z
+            self.cmd_vel_publisher.publish(msg)
+        except Exception as e:
+            print(f"Error publishing Twist message: {e}")
+
+    def publish_servo(self, position):
+        """Publish servo position message"""
+        try:
+            msg = Int32()
+            msg.data = position
+            self.servo_publisher.publish(msg)
+        except Exception as e:
+            print(f"Error publishing servo message: {e}")
 
     def timer_callback(self):
         """Optimized timer callback - only publish when key state changes"""
