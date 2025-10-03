@@ -8,8 +8,10 @@
 3. **Run a node**: `./ros2-docker.sh run bocchi publisher`
 
 ### Docker Management Commands
-- `./docker.sh build` - Build the Docker image
-- `./docker.sh run` - Build and run new container
+- `./docker.sh build` - Build the Docker image (default: ros-base)
+- `./docker.sh build --desktop` - Build with ros-desktop image (includes GUI packages)
+- `./docker.sh run` - Build and run new container (default: ros-base)
+- `./docker.sh run --desktop` - Build and run with ros-desktop image
 - `./docker.sh start` - Start existing container
 - `./docker.sh stop` - Stop container
 - `./docker.sh shell` - Open shell in container (manual access)
@@ -68,10 +70,15 @@ The Docker container runs Dropbear SSH server:
 - **Command**: `ssh root@localhost -p 2222`
 
 ## Container Details
-- **Base Image**: `osrf/ros:humble-desktop`
+- **Base Image**: `ros:humble-ros-base` (default, lightweight)
+- **Alternative**: `osrf/ros:humble-desktop` (with `--desktop` flag, includes GUI packages)
 - **Working Directory**: `/workdir` (mounted from host)
 - **ROS2 Environment**: Automatically sourced
 - **Privileges**: Full system access for hardware interaction
+
+### Image Options
+- **Default (ros-base)**: Minimal ROS2 installation, smaller image size, faster builds
+- **Desktop (--desktop)**: Full ROS2 desktop with GUI tools like RViz, Gazebo, rqt
 
 ## Code style
 - Use dependency injection patterns where possible
