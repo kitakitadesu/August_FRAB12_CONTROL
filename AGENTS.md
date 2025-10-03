@@ -17,3 +17,5 @@
 - Use logging instead of print statements for runtime information
 - Follow PEP 8 style guide for Python code
 - Don't create summary files, keep documentation in inlined comments
+- Commit changes with consistent style from old commit
+- Commit individually focused changes
