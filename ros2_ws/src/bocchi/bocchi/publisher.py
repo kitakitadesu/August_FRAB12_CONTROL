@@ -10,15 +10,15 @@ import os
 import tempfile
 import socket
 import time
-from flask import Flask, request, jsonify, Response, send_from_directory, render_template_string
+from flask import Flask, request, jsonify, send_from_directory, render_template_string
 from flask_cors import CORS
-import queue
 from datetime import datetime
 from mako.template import Template
 from mako.lookup import TemplateLookup
 import socket
-from collections import deque
 from threading import Lock
+import asyncio
+import websockets
 
 minimal_publisher = None
 
@@ -29,29 +29,42 @@ def signal_handler(sig, frame):
     rclpy.shutdown()
     sys.exit(0)
 
-class EventBatcher:
-    """Batches events to reduce network packets"""
+class WebSocketManager:
+    """Manages WebSocket connections and broadcasting"""
 
-    def __init__(self, batch_size=5, timeout=0.1):
-        self.batch_size = batch_size
-        self.timeout = timeout
-        self.events = deque()
-        self.last_flush = time.time()
+    def __init__(self):
+        self.connected_clients = set()
         self.lock = Lock()
 
-    def add_event(self, event):
+    def add_client(self, websocket):
         with self.lock:
-            self.events.append(event)
-            return len(self.events) >= self.batch_size or (time.time() - self.last_flush) > self.timeout
+            self.connected_clients.add(websocket)
 
-    def get_batch(self):
+    def remove_client(self, websocket):
         with self.lock:
-            if not self.events:
-                return []
-            batch = list(self.events)
-            self.events.clear()
-            self.last_flush = time.time()
-            return batch
+            self.connected_clients.discard(websocket)
+
+    async def broadcast(self, message):
+        """Broadcast message to all connected WebSocket clients"""
+        if not self.connected_clients:
+            return
+        
+        disconnected_clients = set()
+        message_str = json.dumps(message)
+        
+        for client in self.connected_clients.copy():
+            try:
+                await client.send(message_str)
+            except websockets.exceptions.ConnectionClosed:
+                disconnected_clients.add(client)
+            except Exception as e:
+                print(f"Error sending to WebSocket client: {e}")
+                disconnected_clients.add(client)
+        
+        # Remove disconnected clients
+        with self.lock:
+            for client in disconnected_clients:
+                self.connected_clients.discard(client)
 
 class KeyStateManager:
     """Manages key state to prevent duplicate publications"""
@@ -201,14 +214,9 @@ class KeyboardAPI:
         self.publisher_node = publisher_node
         self.app = Flask(__name__)
         CORS(self.app)  # Enable CORS for all routes
-        self.connected_clients = 0
         self.server_start_time = time.time()
-        self.event_batcher = EventBatcher(batch_size=5, timeout=0.1)
         self.network_cache = NetworkInfoCache(cache_duration=30)
-
-        # Event queues for different clients
-        self.client_queues = {}
-        self.client_counter = 0
+        self.websocket_manager = WebSocketManager()
 
         # Setup Mako template lookup
         template_dir = os.path.join(os.path.dirname(__file__), 'templates')
@@ -230,25 +238,24 @@ class KeyboardAPI:
             print(f"  {rule.rule} -> {rule.endpoint} [{', '.join(rule.methods)}]")
 
     def broadcast_event(self, event_data):
-        """Broadcast event to all connected SSE clients efficiently"""
-        if self.event_batcher.add_event(event_data):
-            # Time to flush batch
-            batch = self.event_batcher.get_batch()
-            if batch:
-                batched_event = {
-                    'type': 'batch_events',
-                    'events': batch,
-                    'count': len(batch),
-                    'timestamp': int(time.time() * 1000)
-                }
-
-                # Send to all client queues
-                for client_queue in list(self.client_queues.values()):
-                    try:
-                        client_queue.put_nowait(batched_event)
-                    except queue.Full:
-                        # Client queue full, skip
-                        pass
+        """Broadcast event to all connected WebSocket clients"""
+        # Use thread-safe approach to schedule async broadcast
+        if self.websocket_manager.connected_clients:
+            threading.Thread(
+                target=self._schedule_broadcast, 
+                args=(event_data,), 
+                daemon=True
+            ).start()
+    
+    def _schedule_broadcast(self, event_data):
+        """Schedule async broadcast in a new event loop"""
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(self.websocket_manager.broadcast(event_data))
+            loop.close()
+        except Exception as e:
+            print(f"Error broadcasting to WebSocket clients: {e}")
 
     def setup_routes(self):
         """Setup REST API routes"""
@@ -367,7 +374,7 @@ class KeyboardAPI:
                     held_status = " (HELD)" if is_held else ""
                     print(f"Key state updated: '{key}' (code: {key_code}){held_status}")
 
-                    # Add to event batcher for SSE clients
+                    # Broadcast to WebSocket clients
                     event_data = {
                         'type': 'key_received',
                         'key': key,
@@ -432,7 +439,7 @@ class KeyboardAPI:
                         last_key_code = key_code
 
                 if processed_keys:
-                    # Add to event batcher for SSE clients
+                    # Broadcast to WebSocket clients
                     event_data = {
                         'type': 'keys_batch',
                         'keys': processed_keys,
@@ -475,7 +482,7 @@ class KeyboardAPI:
                 if self.publisher_node.key_manager.update_key(key_code, is_pressed=True):
                     print(f"Key DOWN: '{key}' (code: {key_code})")
 
-                    # Add to event batcher for SSE clients
+                    # Broadcast to WebSocket clients
                     event_data = {
                         'type': 'key_down',
                         'key': key,
@@ -518,7 +525,7 @@ class KeyboardAPI:
                 self.publisher_node.key_manager.update_key(key_code, is_pressed=False)
                 print(f"Key UP: '{key}' (code: {key_code})")
 
-                # Add to event batcher for SSE clients
+                # Broadcast to WebSocket clients
                 event_data = {
                     'type': 'key_up',
                     'key': key,
@@ -541,60 +548,24 @@ class KeyboardAPI:
                     'timestamp': int(time.time() * 1000)
                 }), 500
 
-        @self.app.route('/api/events', methods=['GET'])
-        def events():
-            """Server-Sent Events endpoint with optimized batching"""
-            print("SSE endpoint /api/events called")
+        @self.app.route('/api/websocket-info', methods=['GET'])
+        def websocket_info():
+            """WebSocket connection information endpoint"""
             try:
-                def event_stream():
-                    self.connected_clients += 1
-                    self.client_counter += 1
-                    client_id = f"client_{self.client_counter}_{int(time.time())}"
-
-                    # Create dedicated queue for this client
-                    client_queue = queue.Queue(maxsize=100)
-                    self.client_queues[client_id] = client_queue
-
-                    print(f"SSE client connected: {client_id}. Total SSE clients: {self.connected_clients}")
-
-                    try:
-                        # Send welcome event
-                        yield f"data: {json.dumps({'type': 'welcome', 'message': 'Connected to ROS2 Publisher SSE', 'client_id': client_id, 'timestamp': int(time.time() * 1000)})}\n\n"
-
-                        while True:
-                            try:
-                                # Get event with timeout
-                                event_data = client_queue.get(timeout=30)
-                                yield f"data: {json.dumps(event_data)}\n\n"
-                                client_queue.task_done()
-                            except queue.Empty:
-                                # Send keepalive ping (less frequent)
-                                yield f"data: {json.dumps({'type': 'ping', 'timestamp': int(time.time() * 1000)})}\n\n"
-                            except Exception as e:
-                                print(f"SSE stream error for {client_id}: {e}")
-                                break
-
-                    except Exception as e:
-                        print(f"SSE client error for {client_id}: {e}")
-                    finally:
-                        # Clean up client
-                        if client_id in self.client_queues:
-                            del self.client_queues[client_id]
-                        self.connected_clients -= 1
-                        print(f"SSE client disconnected: {client_id}. Total SSE clients: {self.connected_clients}")
-
-                return Response(event_stream(), mimetype='text/event-stream',
-                              headers={
-                                  'Cache-Control': 'no-cache',
-                                  'Connection': 'keep-alive',
-                                  'Access-Control-Allow-Origin': '*',
-                                  'Access-Control-Allow-Headers': 'Cache-Control'
-                              })
+                connected_count = len(self.websocket_manager.connected_clients)
+                return jsonify({
+                    'success': True,
+                    'websocket_url': 'ws://localhost:8765',
+                    'connected_clients': connected_count,
+                    'server_start_time': self.server_start_time,
+                    'uptime_seconds': int(time.time() - self.server_start_time),
+                    'timestamp': int(time.time() * 1000)
+                })
             except Exception as e:
-                print(f"Error in SSE endpoint: {e}")
+                print(f"Error in WebSocket info endpoint: {e}")
                 return jsonify({
                     'success': False,
-                    'error': 'SSE endpoint error',
+                    'error': 'WebSocket info endpoint error',
                     'details': str(e)
                 }), 500
 
@@ -655,38 +626,40 @@ class MinimalPublisher(Node):
         self.key_manager = KeyStateManager(debounce_time=0.02)
         self.network_cache = NetworkInfoCache(cache_duration=60)
         self.flask_app = None
+        self.websocket_server = None
 
         # Check if ports are available
         self.check_ports()
 
-        # Start the REST API server
+        # Start the REST API server and WebSocket server
         self.start_rest_api_server()
+        self.start_websocket_server()
 
         print("=" * 50)
-        print("ROS2 REST API Keyboard Interface Started (Optimized)")
+        print("ROS2 REST API Keyboard Interface Started")
         print("=" * 50)
         print("Services started on all network interfaces (0.0.0.0):")
         print(f"  Web interface: http://localhost:8000")
         print(f"  REST API: http://localhost:5000")
-        print(f"  SSE Events: http://localhost:5000/api/events")
+        print(f"  WebSocket: ws://localhost:8765")
         print("")
         print("Network access URLs (replace <your-ip> with actual IP):")
         print(f"  Web interface: http://<your-ip>:8000")
         print(f"  REST API: http://<your-ip>:5000")
-        print(f"  SSE Events: http://<your-ip>:5000/api/events")
+        print(f"  WebSocket: ws://<your-ip>:8765")
         print("")
-        print("Optimizations enabled:")
-        print("  ✓ Event batching for reduced SSE packets")
+        print("Features enabled:")
+        print("  ✓ Real-time WebSocket communication")
         print("  ✓ Key state debouncing to prevent duplicate ROS2 publications")
         print("  ✓ Network info caching to reduce system calls")
-        print("  ✓ Efficient client queue management")
+        print("  ✓ Multi-key support for combined movements")
         print("Press WASD keys for movement and F key for servo toggle")
         print("W: Forward, S: Backward, A: Turn Left, D: Turn Right, F: Servo 0°/180°")
         print("=" * 50)
         self.print_network_info()
 
     def check_ports(self):
-        """Check if ports 8000 and 5000 are available"""
+        """Check if ports 8000, 5000, and 8765 are available"""
         def is_port_available(port):
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -699,6 +672,8 @@ class MinimalPublisher(Node):
             print("WARNING: Port 8000 is already in use. HTTP server may not start.")
         if not is_port_available(5000):
             print("WARNING: Port 5000 is already in use. REST API server may not start.")
+        if not is_port_available(8765):
+            print("WARNING: Port 8765 is already in use. WebSocket server may not start.")
 
     def print_network_info(self):
         """Print network diagnostic information using cached data"""
@@ -717,7 +692,7 @@ class MinimalPublisher(Node):
                     if ip != '127.0.0.1':
                         print(f"  Web interface: http://{ip}:8000")
                         print(f"  REST API: http://{ip}:5000")
-                        print(f"  SSE Events: http://{ip}:5000/api/events")
+                        print(f"  WebSocket: ws://{ip}:8765")
                         print()
 
             print("  Docker/Container notes:")
@@ -734,14 +709,15 @@ class MinimalPublisher(Node):
         return self.temp_dir
 
     def start_rest_api_server(self):
-        """Start the REST API server with optimized SSE support"""
+        """Start the REST API server with WebSocket support"""
         def run_rest_server():
             try:
-                print("Initializing optimized REST API server with Mako templating...")
+                print("Initializing REST API server with WebSocket and Mako templating...")
 
                 # Create API handler
                 api_handler = KeyboardAPI(self)
                 self.flask_app = api_handler.app
+                self.flask_app.config['api_handler'] = api_handler
 
                 # Ensure HTML file is created (for backwards compatibility)
                 self.create_html_file()
@@ -749,7 +725,7 @@ class MinimalPublisher(Node):
                 print("✓ REST API server starting on 0.0.0.0:5000")
                 print("✓ Mako templates loaded from bocchi/templates/")
                 print("✓ Static files served from bocchi/static/")
-                print("✓ Optimized Server-Sent Events available at /api/events")
+                print("✓ Real-time WebSocket communication enabled")
                 print("✓ HTMX integration enabled")
                 print("✓ Event batching and key debouncing enabled")
 
@@ -774,6 +750,73 @@ class MinimalPublisher(Node):
         # Give the server time to start
         print("Waiting for REST API server to initialize...")
         time.sleep(2)
+
+    def start_websocket_server(self):
+        """Start the WebSocket server for real-time communication"""
+        def run_websocket_server():
+            try:
+                print("Initializing WebSocket server...")
+                
+                async def handle_websocket(websocket, path):
+                    """Handle WebSocket connections"""
+                    self.flask_app.config['api_handler'].websocket_manager.add_client(websocket)
+                    client_address = websocket.remote_address
+                    print(f"WebSocket client connected from {client_address}")
+                    
+                    try:
+                        # Send welcome message
+                        welcome_msg = {
+                            'type': 'welcome',
+                            'message': f'Connected to bocchi robot controller',
+                            'timestamp': int(time.time() * 1000)
+                        }
+                        await websocket.send(json.dumps(welcome_msg))
+                        
+                        # Keep connection alive and handle incoming messages
+                        async for message in websocket:
+                            try:
+                                data = json.loads(message)
+                                print(f"Received WebSocket message: {data}")
+                                # Handle any client-side messages if needed
+                            except json.JSONDecodeError:
+                                print(f"Invalid JSON received from WebSocket client")
+                                
+                    except websockets.exceptions.ConnectionClosed:
+                        print(f"WebSocket client {client_address} disconnected")
+                    except Exception as e:
+                        print(f"WebSocket error: {e}")
+                    finally:
+                        self.flask_app.config['api_handler'].websocket_manager.remove_client(websocket)
+                
+                async def start_server():
+                    try:
+                        server = await websockets.serve(
+                            handle_websocket,
+                            "0.0.0.0",
+                            8765,
+                            ping_interval=20,
+                            ping_timeout=10
+                        )
+                        print("✓ WebSocket server started successfully on port 8765")
+                        await server.wait_closed()
+                    except Exception as e:
+                        print(f"✗ Failed to start WebSocket server: {e}")
+                
+                # Run the WebSocket server
+                asyncio.run(start_server())
+                
+            except Exception as e:
+                print(f"✗ WebSocket server error: {e}")
+                import traceback
+                traceback.print_exc()
+
+        print("Starting WebSocket server thread...")
+        self.websocket_thread = threading.Thread(target=run_websocket_server, daemon=True)
+        self.websocket_thread.start()
+        
+        # Give the WebSocket server time to start
+        print("Waiting for WebSocket server to initialize...")
+        time.sleep(1)
 
     def timer_callback(self):
         """Optimized timer callback - only publish when key state changes"""
