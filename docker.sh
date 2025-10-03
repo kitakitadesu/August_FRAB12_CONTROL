@@ -10,11 +10,11 @@ DOCKERFILE="Dockerfile"  # Default to base image
 PLATFORM=""  # Default to native platform
 
 function show_help() {
-    echo "Usage: $0 [COMMAND] [OPTIONS]"
+    echo "Usage: $0 COMMAND [OPTIONS]"
     echo ""
     echo "Commands:"
-    echo "  build [--desktop] [--platform]    Build the Docker image (default: ros-base, --desktop: ros-desktop)"
-    echo "  run [--desktop] [--platform]      Run the container (creates new container)"
+    echo "  build                Build the Docker image (default: ros-base)"
+    echo "  run                  Run the container (creates new container)"
     echo "  start                Start existing container"
     echo "  stop                 Stop the container"
     echo "  shell                Open a shell in the running container"
@@ -26,8 +26,13 @@ function show_help() {
     echo "Options:"
     echo "  --desktop            Use ros:humble-desktop image (Dockerfile.desktop)"
     echo "                       Default: ros:humble-ros-base image (Dockerfile)"
-    echo "  --platform           Build for specific platform (e.g., --platform linux/amd64)"
+    echo "  --platform PLATFORM  Build for specific platform (e.g., linux/amd64)"
     echo "                       Default: native platform"
+    echo ""
+    echo "Examples:"
+    echo "  $0 build --desktop"
+    echo "  $0 build --platform linux/amd64"
+    echo "  $0 run --desktop --platform linux/amd64"
     echo ""
     echo "ROS2 Development:"
     echo "  Use ./ros2-docker.sh for ROS2 commands (build, run, shell, etc.)"
@@ -99,22 +104,39 @@ function clean_all() {
 }
 
 # Parse options
-for arg in "$@"; do
-    case $arg in
+while [[ $# -gt 0 ]]; do
+    case $1 in
         --desktop)
             DOCKERFILE="Dockerfile.desktop"
             IMAGE_NAME="ros2-bocchi-desktop"
             CONTAINER_NAME="ros2-bocchi-dev-desktop"
+            shift
             ;;
         --platform)
-            # Get the next argument as platform value
             shift
             PLATFORM="$1"
+            shift
+            ;;
+        -*)
+            echo "Unknown option: $1"
+            show_help
+            exit 1
+            ;;
+        *)
+            COMMAND="$1"
+            shift
             ;;
     esac
 done
 
-case "$1" in
+# Set default command if none provided
+if [ -z "$COMMAND" ]; then
+    echo "Error: No command provided"
+    show_help
+    exit 1
+fi
+
+case "$COMMAND" in
     build)
         build_image
         ;;
@@ -144,7 +166,7 @@ case "$1" in
         show_help
         ;;
     *)
-        echo "Unknown command: $1"
+        echo "Unknown command: $COMMAND"
         show_help
         exit 1
         ;;
