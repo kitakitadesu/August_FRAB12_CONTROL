@@ -1,0 +1,334 @@
+name: Build and Test ROS2 Package
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  ROS_DISTRO: humble
+  CACHE_VERSION: v1
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-22.04
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup ROS2 Humble
+      uses: ros-tooling/setup-ros@v0.7
+      with:
+        required-ros-distributions: humble
+        
+    - name: Cache APT packages
+      uses: actions/cache@v3
+      with:
+        path: /var/cache/apt/archives
+        key: ${{ runner.os }}-apt-${{ env.CACHE_VERSION }}-${{ hashFiles('workdir/ros2_ws/src/bocchi/package.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-apt-${{ env.CACHE_VERSION }}-
+          ${{ runner.os }}-apt-
+          
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ env.CACHE_VERSION }}-${{ hashFiles('workdir/ros2_ws/src/bocchi/requirements.txt', 'workdir/ros2_ws/src/bocchi/setup.py') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-${{ env.CACHE_VERSION }}-
+          ${{ runner.os }}-pip-
+          
+    - name: Cache ROS2 workspace
+      uses: actions/cache@v3
+      with:
+        path: |
+          workdir/ros2_ws/build
+          workdir/ros2_ws/install
+          workdir/ros2_ws/log
+        key: ${{ runner.os }}-ros2-${{ env.CACHE_VERSION }}-${{ hashFiles('workdir/ros2_ws/src/**/*.py', 'workdir/ros2_ws/src/**/*.xml', 'workdir/ros2_ws/src/**/*.cfg') }}
+        restore-keys: |
+          ${{ runner.os }}-ros2-${{ env.CACHE_VERSION }}-
+          ${{ runner.os }}-ros2-
+          
+    - name: Cache rosdep
+      uses: actions/cache@v3
+      with:
+        path: |
+          /etc/ros/rosdep/sources.list.d
+          /var/lib/ros/rosdep
+          ~/.ros/rosdep
+        key: ${{ runner.os }}-rosdep-${{ env.CACHE_VERSION }}-${{ hashFiles('workdir/ros2_ws/src/bocchi/package.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-rosdep-${{ env.CACHE_VERSION }}-
+          ${{ runner.os }}-rosdep-
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-pip python3-pytest python3-flake8 curl netstat-openbsd lsof
+        
+    - name: Make scripts executable
+      run: |
+        cd workdir/ros2_ws
+        chmod +x scripts/*.sh
+        
+    - name: Run setup script
+      run: |
+        cd workdir/ros2_ws
+        ./scripts/setup.sh --ci
+        
+    - name: Install Python dependencies
+      run: |
+        cd workdir/ros2_ws/src/bocchi
+        if [ -f requirements.txt ]; then
+          pip3 install -r requirements.txt
+        fi
+        pip3 install websockets flask flask-cors requests mako pytest-cov
+        
+    - name: Install ROS2 dependencies
+      run: |
+        source /opt/ros/humble/setup.bash
+        cd workdir/ros2_ws
+        rosdep update
+        rosdep install --from-paths src/bocchi --ignore-src -r -y
+        
+    - name: Build ROS2 workspace using build script
+      run: |
+        source /opt/ros/humble/setup.bash
+        cd workdir/ros2_ws
+        ./scripts/build.sh
+        
+    - name: Run comprehensive test suite
+      run: |
+        source /opt/ros/humble/setup.bash
+        cd workdir/ros2_ws
+        source install/setup.bash
+        ./scripts/test.sh --coverage
+        
+    - name: Run ROS2 style checks
+      run: |
+        source /opt/ros/humble/setup.bash
+        cd workdir/ros2_ws
+        source install/setup.bash
+        colcon test --packages-select bocchi --event-handlers console_direct+
+        
+    - name: Check test results
+      run: |
+        cd workdir/ros2_ws
+        colcon test-result --verbose
+        
+    - name: Run development checks
+      run: |
+        source /opt/ros/humble/setup.bash
+        cd workdir/ros2_ws
+        source install/setup.bash
+        ./scripts/dev.sh lint
+        
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-${{ github.run_number }}
+        path: |
+          workdir/ros2_ws/log/latest_test/
+          workdir/ros2_ws/htmlcov/
+        retention-days: 30
+        
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: coverage-report-${{ github.run_number }}
+        path: workdir/ros2_ws/htmlcov/
+        retention-days: 30
+
+  integration-test:
+    runs-on: ubuntu-22.04
+    needs: build-and-test
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup ROS2 Humble
+      uses: ros-tooling/setup-ros@v0.7
+      with:
+        required-ros-distributions: humble
+        
+    - name: Cache APT packages
+      uses: actions/cache@v3
+      with:
+        path: /var/cache/apt/archives
+        key: ${{ runner.os }}-apt-${{ env.CACHE_VERSION }}-${{ hashFiles('workdir/ros2_ws/src/bocchi/package.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-apt-${{ env.CACHE_VERSION }}-
+          ${{ runner.os }}-apt-
+          
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ env.CACHE_VERSION }}-${{ hashFiles('workdir/ros2_ws/src/bocchi/requirements.txt', 'workdir/ros2_ws/src/bocchi/setup.py') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-${{ env.CACHE_VERSION }}-
+          ${{ runner.os }}-pip-
+          
+    - name: Cache ROS2 workspace
+      uses: actions/cache@v3
+      with:
+        path: |
+          workdir/ros2_ws/build
+          workdir/ros2_ws/install
+          workdir/ros2_ws/log
+        key: ${{ runner.os }}-ros2-${{ env.CACHE_VERSION }}-${{ hashFiles('workdir/ros2_ws/src/**/*.py', 'workdir/ros2_ws/src/**/*.xml', 'workdir/ros2_ws/src/**/*.cfg') }}
+        restore-keys: |
+          ${{ runner.os }}-ros2-${{ env.CACHE_VERSION }}-
+          ${{ runner.os }}-ros2-
+          
+    - name: Cache rosdep
+      uses: actions/cache@v3
+      with:
+        path: |
+          /etc/ros/rosdep/sources.list.d
+          /var/lib/ros/rosdep
+          ~/.ros/rosdep
+        key: ${{ runner.os }}-rosdep-${{ env.CACHE_VERSION }}-${{ hashFiles('workdir/ros2_ws/src/bocchi/package.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-rosdep-${{ env.CACHE_VERSION }}-
+          ${{ runner.os }}-rosdep-
+        
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-pip curl netstat-openbsd lsof
+        
+    - name: Make scripts executable
+      run: |
+        cd workdir/ros2_ws
+        chmod +x scripts/*.sh
+        
+    - name: Setup and build
+      run: |
+        source /opt/ros/humble/setup.bash
+        cd workdir/ros2_ws
+        ./scripts/setup.sh --ci
+        pip3 install -r src/bocchi/requirements.txt || true
+        pip3 install websockets flask flask-cors requests mako
+        rosdep update
+        rosdep install --from-paths src/bocchi --ignore-src -r -y
+        ./scripts/build.sh
+        
+    - name: Run integration tests
+      run: |
+        source /opt/ros/humble/setup.bash
+        cd workdir/ros2_ws
+        source install/setup.bash
+        ./scripts/test.sh --integration --verbose
+        
+    - name: Run security tests
+      run: |
+        source /opt/ros/humble/setup.bash
+        cd workdir/ros2_ws
+        source install/setup.bash
+        ./scripts/test.sh --security --verbose
+        
+    - name: Test system monitoring
+      run: |
+        source /opt/ros/humble/setup.bash
+        cd workdir/ros2_ws
+        source install/setup.bash
+        timeout 30 ./scripts/monitor.sh --once || echo "Monitor test completed"
+
+  performance-test:
+    runs-on: ubuntu-22.04
+    needs: build-and-test
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup ROS2 Humble
+      uses: ros-tooling/setup-ros@v0.7
+      with:
+        required-ros-distributions: humble
+        
+    - name: Cache APT packages
+      uses: actions/cache@v3
+      with:
+        path: /var/cache/apt/archives
+        key: ${{ runner.os }}-apt-${{ env.CACHE_VERSION }}-${{ hashFiles('workdir/ros2_ws/src/bocchi/package.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-apt-${{ env.CACHE_VERSION }}-
+          ${{ runner.os }}-apt-
+          
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ env.CACHE_VERSION }}-${{ hashFiles('workdir/ros2_ws/src/bocchi/requirements.txt', 'workdir/ros2_ws/src/bocchi/setup.py') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-${{ env.CACHE_VERSION }}-
+          ${{ runner.os }}-pip-
+          
+    - name: Cache ROS2 workspace
+      uses: actions/cache@v3
+      with:
+        path: |
+          workdir/ros2_ws/build
+          workdir/ros2_ws/install
+          workdir/ros2_ws/log
+        key: ${{ runner.os }}-ros2-${{ env.CACHE_VERSION }}-${{ hashFiles('workdir/ros2_ws/src/**/*.py', 'workdir/ros2_ws/src/**/*.xml', 'workdir/ros2_ws/src/**/*.cfg') }}
+        restore-keys: |
+          ${{ runner.os }}-ros2-${{ env.CACHE_VERSION }}-
+          ${{ runner.os }}-ros2-
+          
+    - name: Cache rosdep
+      uses: actions/cache@v3
+      with:
+        path: |
+          /etc/ros/rosdep/sources.list.d
+          /var/lib/ros/rosdep
+          ~/.ros/rosdep
+        key: ${{ runner.os }}-rosdep-${{ env.CACHE_VERSION }}-${{ hashFiles('workdir/ros2_ws/src/bocchi/package.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-rosdep-${{ env.CACHE_VERSION }}-
+          ${{ runner.os }}-rosdep-
+        
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-pip curl netstat-openbsd lsof
+        
+    - name: Make scripts executable
+      run: |
+        cd workdir/ros2_ws
+        chmod +x scripts/*.sh
+        
+    - name: Setup and build
+      run: |
+        source /opt/ros/humble/setup.bash
+        cd workdir/ros2_ws
+        ./scripts/setup.sh --ci
+        pip3 install -r src/bocchi/requirements.txt || true
+        pip3 install websockets flask flask-cors requests mako
+        rosdep update
+        rosdep install --from-paths src/bocchi --ignore-src -r -y
+        ./scripts/build.sh
+        
+    - name: Run performance tests
+      run: |
+        source /opt/ros/humble/setup.bash
+        cd workdir/ros2_ws
+        source install/setup.bash
+        ./scripts/test.sh --performance --verbose
+        
+    - name: Upload performance results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: performance-results-${{ github.run_number }}
+        path: workdir/ros2_ws/log/
+        retention-days: 7
