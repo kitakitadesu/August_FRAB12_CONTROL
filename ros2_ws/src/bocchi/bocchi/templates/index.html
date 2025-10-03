@@ -32,23 +32,40 @@ import operator
                 <!-- Connection Status -->
                 <section style="border: 1px solid #999; padding: 0.5rem; margin-bottom: 1rem;">
                     <h2 style="margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 0.5rem;">Connection Status</h2>
-                    <div id="status" 
-                         role="status" 
+
+                    <!-- Mode Selector -->
+                    <div style="border: 1px solid #666; padding: 0.5rem; margin-bottom: 0.5rem; background: #f0f8ff;">
+                        <p style="margin: 0 0 0.5rem 0; text-align: center;">
+                            <label for="communicationMode" style="font-weight: bold;">Communication Mode:</label>
+                        </p>
+                        <div style="text-align: center;">
+                            <select id="communicationMode" onchange="switchCommunicationMode(this.value)" style="padding: 0.25rem; font-size: 1em;">
+                                <option value="websocket">WebSocket (Real-time)</option>
+                                <option value="rest">REST API (Fallback)</option>
+                            </select>
+                        </div>
+                        <p id="modeDescription" style="margin: 0.25rem 0 0 0; text-align: center; font-size: 0.9em; color: #666;">
+                            WebSocket provides real-time keyboard control with lower latency
+                        </p>
+                    </div>
+
+                    <div id="status"
+                         role="status"
                          aria-live="polite"
                          style="border: 1px dashed #999; padding: 0.5rem; text-align: center;">
                         <div id="status-content">
-                            <p><strong>Status:</strong> Connecting to WebSocket server...</p>
+                            <p><strong>Status:</strong> Initializing...</p>
                         </div>
                     </div>
-                    
+
                     <!-- Connection Mode Indicator -->
                     <div style="border: 1px solid #666; padding: 0.5rem; margin-top: 0.5rem; background: #f8f8f8;">
                         <p style="margin: 0; text-align: center;">
-                            <strong>Input Mode:</strong> 
-                            <span id="connectionMode" style="color: #0066cc; font-weight: bold;">Initializing...</span>
+                            <strong>Current Mode:</strong>
+                            <span id="connectionMode" style="color: #0066cc; font-weight: bold;">WebSocket</span>
                         </p>
-                        <p style="margin: 0.25rem 0 0 0; text-align: center; font-size: 0.9em; color: #666;">
-                            WebSocket provides real-time keyboard control with lower latency
+                        <p id="connectionDescription" style="margin: 0.25rem 0 0 0; text-align: center; font-size: 0.9em; color: #666;">
+                            Real-time bidirectional communication
                         </p>
                     </div>
                 </section>
@@ -476,6 +493,85 @@ import operator
     </main>
 
     <!-- JavaScript -->
+    <script>
+        // Global variables for mode switching
+        let currentMode = 'websocket';
+        let keyboardInterface = null;
+
+        // Mode switching function
+        function switchCommunicationMode(mode) {
+            currentMode = mode;
+            const modeDescription = document.getElementById('modeDescription');
+            const connectionMode = document.getElementById('connectionMode');
+            const connectionDescription = document.getElementById('connectionDescription');
+            const statusContent = document.getElementById('status-content');
+
+            // Update UI descriptions
+            if (mode === 'websocket') {
+                modeDescription.textContent = 'WebSocket provides real-time keyboard control with lower latency';
+                connectionMode.textContent = 'WebSocket';
+                connectionMode.style.color = '#008000';
+                connectionDescription.textContent = 'Real-time bidirectional communication';
+                statusContent.innerHTML = '<p><strong>Status:</strong> Connecting to WebSocket server...</p>';
+            } else {
+                modeDescription.textContent = 'REST API provides reliable communication with request/response pattern';
+                connectionMode.textContent = 'REST API';
+                connectionMode.style.color = '#FFA500';
+                connectionDescription.textContent = 'Request/response based communication';
+                statusContent.innerHTML = '<p><strong>Status:</strong> REST API mode active</p>';
+            }
+
+            // Reinitialize interface with new mode
+            initializeKeyboardInterface(mode);
+        }
+
+        // Initialize keyboard interface based on mode
+        function initializeKeyboardInterface(mode) {
+            // Clean up existing interface
+            if (keyboardInterface && typeof keyboardInterface.cleanup === 'function') {
+                keyboardInterface.cleanup();
+            }
+
+            // Load appropriate JavaScript based on mode
+            if (mode === 'websocket') {
+                // For WebSocket mode, load keyboard.js
+                if (!document.querySelector('script[src="/static/js/keyboard.js"]')) {
+                    const script = document.createElement('script');
+                    script.src = '/static/js/keyboard.js';
+                    script.onload = function() {
+                        // Initialize WebSocket interface
+                        if (window.WebSocketKeyboardInterface) {
+                            keyboardInterface = new WebSocketKeyboardInterface();
+                        }
+                    };
+                    document.head.appendChild(script);
+                } else {
+                    // Script already loaded, reinitialize
+                    if (window.WebSocketKeyboardInterface) {
+                        keyboardInterface = new WebSocketKeyboardInterface();
+                    }
+                }
+            } else {
+                // For REST mode, load keyboard-rest.js
+                if (!document.querySelector('script[src="/static/js/keyboard-rest.js"]')) {
+                    const script = document.createElement('script');
+                    script.src = '/static/js/keyboard-rest.js';
+                    script.onload = function() {
+                        // Initialize REST interface
+                        if (window.RESTKeyboardInterface) {
+                            keyboardInterface = new RESTKeyboardInterface();
+                        }
+                    };
+                    document.head.appendChild(script);
+                } else {
+                    // Script already loaded, reinitialize
+                    if (window.RESTKeyboardInterface) {
+                        keyboardInterface = new RESTKeyboardInterface();
+                    }
+                }
+            }
+        }
+    </script>
     <script src="/static/js/keyboard.js"></script>
     <script src="/static/js/ui-enhancements.js"></script>
     
@@ -493,6 +589,9 @@ import operator
         document.addEventListener('DOMContentLoaded', function() {
             document.body.tabIndex = -1;
             document.body.focus();
+
+            // Initialize with default WebSocket mode
+            switchCommunicationMode('websocket');
         });
     </%text>
     </script>

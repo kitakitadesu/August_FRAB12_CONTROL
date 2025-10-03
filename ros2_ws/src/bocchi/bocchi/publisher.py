@@ -4,6 +4,7 @@ import signal
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Int32, Bool
 import sys
+import argparse
 import threading
 import json
 import os
@@ -369,6 +370,32 @@ class MessageBatchProcessor:
             'key_buffer_size': len(self.key_state_buffer),
             'avg_processing_time_ms': round(self.stats['processing_time_avg'], 2)
         }
+
+    async def flush_key_state_buffer(self):
+        """Flush any pending key state changes in the buffer."""
+        # Process any remaining key state changes
+        if self.key_state_buffer:
+            # Apply any pending key state updates
+            for key_code, state in self.key_state_buffer.items():
+                if self.key_state_manager:
+                    self.key_state_manager.update_key(key_code, state.get('pressed', False))
+
+            # Clear the buffer
+            self.key_state_buffer.clear()
+
+            # Publish final movement state if publisher is available
+            if self.publisher_node:
+                twist = self.key_state_manager.get_twist_if_changed() if self.key_state_manager else None
+                if twist is not None:
+                    self.publisher_node.twist_publisher.publish(twist)
+
+                # Handle servo changes
+                if self.key_state_manager and hasattr(self.key_state_manager, 'servo_changed') and self.key_state_manager.servo_changed:
+                    servo_msg = Int32()
+                    servo_msg.data = self.key_state_manager.servo_position
+                    if hasattr(self.publisher_node, 'servo_publisher'):
+                        self.publisher_node.servo_publisher.publish(servo_msg)
+                    self.key_state_manager.servo_changed = False
 
 class OptimizedWebSocketHandler:
     """WebSocket handler that integrates with MessageBatchProcessor for improved performance."""
@@ -1077,8 +1104,9 @@ class KeyboardAPI:
             }), 500
 
 class MinimalPublisher(Node):
-    def __init__(self):
+    def __init__(self, webui_mode='both'):
         super().__init__('minimal_publisher')
+        self.webui_mode = webui_mode
         self.twist_publisher = self.create_publisher(Twist, 'cmd_vel', 10)
         self.servo_publisher = self.create_publisher(Int32, 'servo_position', 10)
         self.led_publisher = self.create_publisher(Bool, 'toggle_led', 10)
@@ -1101,9 +1129,11 @@ class MinimalPublisher(Node):
         # Check if ports are available
         self.check_ports()
 
-        # Start the REST API server and WebSocket server
-        self.start_rest_api_server()
-        self.start_websocket_server()
+        # Start servers based on webui mode
+        if self.webui_mode in ['rest', 'both']:
+            self.start_rest_api_server()
+        if self.webui_mode in ['websocket', 'both']:
+            self.start_websocket_server()
 
         print("=" * 50)
         print("ROS2 REST API Keyboard Interface Started")
@@ -2023,20 +2053,26 @@ class MinimalPublisher(Node):
 
 def main(args=None):
     global minimal_publisher
-    
+
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Bocchi Robot Controller')
+    parser.add_argument('--webui-mode', choices=['rest', 'websocket', 'both'],
+                       default='both', help='WebUI communication mode (default: both)')
+    parsed_args, ros_args = parser.parse_known_args(args if args else sys.argv[1:])
+
     try:
-        rclpy.init(args=args)
+        rclpy.init(args=ros_args)
         signal.signal(signal.SIGINT, signal_handler)
 
-        minimal_publisher = MinimalPublisher()
-        
+        minimal_publisher = MinimalPublisher(webui_mode=parsed_args.webui_mode)
+
         # Give servers time to initialize before spinning
         print("Waiting for servers to initialize...")
         time.sleep(3)
-        
+
         print("Starting ROS2 node spin...")
         rclpy.spin(minimal_publisher)
-        
+
     except KeyboardInterrupt:
         print("\nShutdown requested by user")
     except Exception as e:
