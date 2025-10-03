@@ -36,8 +36,46 @@ This node publishes to two topics for robot control:
 ## Usage
 
 1. Start the publisher: `ros2 run bocchi publisher`
-2. Open web interface: `http://localhost:8000`
+2. Open web interface: `http://localhost:5000`
 3. Press WASD keys for movement, F key for servo control
 4. Monitor topics:
    - `ros2 topic echo /cmd_vel`
    - `ros2 topic echo /servo_position`
+
+## WebSocket Keyboard Control
+
+The system now supports real-time keyboard control via WebSocket for improved responsiveness:
+
+### Features
+- **Real-time control**: Lower latency than REST API
+- **Automatic fallback**: Falls back to REST API if WebSocket unavailable  
+- **Connection status**: Visual indicator shows current input mode
+- **Simultaneous keys**: Support for multiple key combinations
+- **Debouncing**: Prevents duplicate commands from rapid key presses
+
+### WebSocket Endpoints
+- **WebSocket Server**: `ws://localhost:8765` (or `ws://<your-ip>:8765`)
+- **Message Types**:
+  - `key_down`: Key press event
+  - `key_up`: Key release event
+  - `keyboard`: Legacy key event with held state
+
+### Message Format
+```json
+{
+  "type": "key_down",
+  "key": "W",
+  "key_code": 87,
+  "timestamp": 1640995200000
+}
+```
+
+### Testing WebSocket Control
+Use the included test script:
+```bash
+# Run automated tests
+python3 test_websocket_keyboard.py
+
+# Interactive mode
+python3 test_websocket_keyboard.py --interactive
+```
