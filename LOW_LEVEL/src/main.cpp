@@ -10,7 +10,9 @@
 #include "../lib/IncrementalMotorEncoder/incremental_motor_encoder.hpp"
 
 #include "nodes/publishers/encoder_publisher.hpp"
+#include "nodes/publishers/led_status_publisher.hpp"
 #include "nodes/subscribers/cmd_vel_subscriber.hpp"
+#include "nodes/subscribers/toggle_led_subscriber.hpp"
 
 #if !defined(MICRO_ROS_TRANSPORT_ARDUINO_SERIAL)
 #error Only avaliable for Arduino framework with serial transport.
@@ -34,7 +36,9 @@ IncrementalMotorEncoder encoderM4(motorM4, 18, 19);   // GP18, GP19
 
 // ROS2 Node instances
 EncoderPublisher encoder_publisher(encoderM1, encoderM2);
+LedStatusPublisher led_status_publisher;
 CmdVelSubscriber cmd_vel_subscriber(encoderM1, encoderM2, encoderM3, encoderM4);
+ToggleLedSubscriber toggle_led_subscriber;
 
 #define RCCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){error_loop();}}
 #define RCSOFTCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){}}
@@ -61,12 +65,14 @@ void setup() {
   // create node
   rclc_node_init_default(&node, "micro_ros_platformio_node", "", &support);
 
-  // create executor (now handles 2 handles: timer and subscriber)
-  rclc_executor_init(&executor, &support.context, 2, &allocator);
+  // create executor (now handles 4 handles: two timers and two subscribers)
+  rclc_executor_init(&executor, &support.context, 4, &allocator);
 
   // Setup ROS2 nodes
   encoder_publisher.setup(&node, &support, &executor);
+  led_status_publisher.setup(&node, &support, &executor);
   cmd_vel_subscriber.setup(&node, &support, &executor);
+  toggle_led_subscriber.setup(&node, &support, &executor);
 
   // Initialize motors and encoders
   motorM1.setup();
@@ -78,9 +84,22 @@ void setup() {
   encoderM2.setup();
   encoderM3.setup();
   encoderM4.setup();
+  // motorM1.setSpeed(150);
+  // motorM1.forward();
+  //   motorM2.setSpeed(150);
+  // motorM2.forward();
+  //   motorM3.setSpeed(150);
+  // motorM3.forward();
+  //   motorM4.setSpeed(150);
+  // motorM4.forward();
+
+  // Setup built-in LED for blinking
+  pinMode(LED_BUILTIN, OUTPUT);
 }
 
 void loop() {
   delay(100);
   rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100));
+
+  digitalWrite(LED_BUILTIN, toggle_led_subscriber.isLedEnabled());
 }
