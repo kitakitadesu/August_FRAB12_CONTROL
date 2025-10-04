@@ -1,0 +1,21 @@
+Bocchi Robot Controller Health Report
+Generated: 2025-10-03 02:25:32
+========================================
+
+SYSTEM OVERVIEW:
+OS: GNU/Linux 6.15.11-orbstack-00542-g4f455d264886
+Architecture: x86_64
+Hostname: 36ebae96b42b
+User: root
+
+RESOURCE SUMMARY:
+CPU: 12 cores
+Memory: 11Gi total
+Disk: 259G total
+
+SERVICE STATUS:
+ROS2 Distro: humble
+Publisher: Stopped
+REST API: Inactive
+WebSocket: Not Listening
+Web UI: Inaccessible

@@ -1,6 +1,54 @@
-log/
+# ROS2 build artifacts
 build/
-.idea/
+install/
+log/
+
+# Python
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
 .venv/
-**/__pycache__
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.idea/
+.vscode/
+.ropeproject/
+*.swp
+*.swo
+*~
+
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ROS specific
+*.bag
+*.orig
+*.rej
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Colcon specific
+.colcon_install_layout
+.colcon_test_result_summary
+
+# Package specific
+*.egg-info/
+dist/
+.coverage
+htmlcov/ros2_ws/health_report_*.txt
