@@ -1,1 +1,1 @@
-rclpy:std_msgs
+geometry_msgs:python3-flask:python3-flask-cors:python3-mako:python3-requests:python3-websockets:rclpy:std_msgs

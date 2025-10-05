@@ -5,7 +5,7 @@
 
 class DCMotor {
 public:
-    DCMotor(int pin1, int pin2, int enablePin);
+    DCMotor(int pin1, int pin2);
     ~DCMotor();
 
     void setup();
@@ -18,7 +18,6 @@ public:
 private:
     int _pin1;
     int _pin2;
-    int _enablePin;
     int _speed;
 };
 

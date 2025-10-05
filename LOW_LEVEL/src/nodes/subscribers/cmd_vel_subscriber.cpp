@@ -1,6 +1,21 @@
 #include "cmd_vel_subscriber.hpp"
+#include <math.h>
 
 #define RCCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){/*error*/}}
+
+namespace {
+// Tune this value to match the robot's footprint (L + W) / wheel_radius.
+constexpr float kRotationGain = 0.5f;
+// Motor deadzone to prevent jitter while stopping.
+constexpr float kDeadzone = 0.02f;
+// Set to true when a positive command should spin the wheel "backward" due to wiring or mirrored mounting.
+constexpr bool kMotorPolarity[4] = {
+    false,  // Motor M1 (top-left)
+    false,  // Motor M2 (bottom-left)
+    false,  // Motor M3 (top-right)
+    false   // Motor M4 (bottom-right)
+};
+}
 
 CmdVelSubscriber* CmdVelSubscriber::_instance = nullptr;
 
@@ -34,49 +49,69 @@ void CmdVelSubscriber::subscription_callback(const void * msgin) {
 }
 
 void CmdVelSubscriber::handle_cmd_vel(const geometry_msgs__msg__Twist* msg) {
-    // Extract velocities
-    float linear_x = msg->linear.x;
-    float angular_z = msg->angular.z;
+    const float vx = msg->linear.x;   // Forward (+X)
+    const float vy = msg->linear.y;   // Left (+Y)
+    const float wz = msg->angular.z;  // Counter-clockwise (+Z)
 
-    // Differential drive calculation
-    // Assuming M1,M3 = left side, M2,M4 = right side
-    float left_speed = linear_x - angular_z;
-    float right_speed = linear_x + angular_z;
+    // Inverse kinematics for mecanum drive (normalized, wheel order: FL, FR, RL, RR)
+    const float rotation_component = wz * kRotationGain;
 
-    // Scale to motor speed range (0-255)
-    // Assuming input range is -1.0 to 1.0
-    int left_motor_speed = constrain(abs(left_speed) * 255, 0, 255);
-    int right_motor_speed = constrain(abs(right_speed) * 255, 0, 255);
+    const float front_left  = vx - vy - rotation_component; // M1 (top-left)
+    const float rear_left   = vx + vy - rotation_component; // M2 (bottom-left)
+    const float front_right = vx + vy + rotation_component; // M3 (top-right)
+    const float rear_right  = vx - vy + rotation_component; // M4 (bottom-right)
 
-    // Control left side motors (M1, M3)
-    if (left_speed > 0.01) {
-        _encoder_m1.setSpeed(left_motor_speed);
-        _encoder_m1.forward();
-        _encoder_m3.setSpeed(left_motor_speed);
-        _encoder_m3.forward();
-    } else if (left_speed < -0.01) {
-        _encoder_m1.setSpeed(left_motor_speed);
-        _encoder_m1.backward();
-        _encoder_m3.setSpeed(left_motor_speed);
-        _encoder_m3.backward();
-    } else {
-        _encoder_m1.stop();
-        _encoder_m3.stop();
+    float wheel_commands[4] = {
+        front_left,
+        rear_left,
+        front_right,
+        rear_right
+    };
+
+    // Normalize so the largest magnitude is 1.0 to keep relative ratios
+    float max_command = fabsf(wheel_commands[0]);
+    for (int i = 1; i < 4; ++i) {
+        float magnitude = fabsf(wheel_commands[i]);
+        if (magnitude > max_command) {
+            max_command = magnitude;
+        }
     }
 
-    // Control right side motors (M2, M4)
-    if (right_speed > 0.01) {
-        _encoder_m2.setSpeed(right_motor_speed);
-        _encoder_m2.forward();
-        _encoder_m4.setSpeed(right_motor_speed);
-        _encoder_m4.forward();
-    } else if (right_speed < -0.01) {
-        _encoder_m2.setSpeed(right_motor_speed);
-        _encoder_m2.backward();
-        _encoder_m4.setSpeed(right_motor_speed);
-        _encoder_m4.backward();
+    if (max_command < 1.0f) {
+        max_command = 1.0f;
+    }
+
+    wheel_commands[0] /= max_command;
+    wheel_commands[1] /= max_command;
+    wheel_commands[2] /= max_command;
+    wheel_commands[3] /= max_command;
+
+    commandWheel(_encoder_m1, wheel_commands[0], kMotorPolarity[0]); // M1 top-left
+    commandWheel(_encoder_m2, wheel_commands[1], kMotorPolarity[1]); // M2 bottom-left
+    commandWheel(_encoder_m3, wheel_commands[2], kMotorPolarity[2]); // M3 top-right
+    commandWheel(_encoder_m4, wheel_commands[3], kMotorPolarity[3]); // M4 bottom-right
+}
+
+void CmdVelSubscriber::commandWheel(IncrementalMotorEncoder& encoder, float command, bool inverted_polarity) {
+    const float clipped = constrain(command, -1.0f, 1.0f);
+    const float magnitude = fabsf(clipped);
+
+    if (magnitude < kDeadzone) {
+        encoder.stop();
+        return;
+    }
+
+    const uint8_t pwm = static_cast<uint8_t>(constrain(magnitude * 255.0f, 0.0f, 255.0f));
+    encoder.setSpeed(pwm);
+
+    bool forward = (clipped > 0.0f);
+    if (inverted_polarity) {
+        forward = !forward;
+    }
+
+    if (forward) {
+        encoder.forward();
     } else {
-        _encoder_m2.stop();
-        _encoder_m4.stop();
+        encoder.backward();
     }
 }

@@ -1,5 +1,1 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<launch>
-    <node pkg="bocchi" exec="publisher" name="sim" namespace="bocchi" />
-    <node pkg="bocchi" exec="subscriber" name="sim" namespace="bocchi" />
-</launch>
+/home/matthurindo/August_FRAB12_CONTROL/ROS2_PACKAGE/ros2_ws/build/bocchi/launch/keyboard_launch.xml

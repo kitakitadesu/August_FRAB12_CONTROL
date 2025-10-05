@@ -28,6 +28,7 @@ private:
     static CmdVelSubscriber* _instance;
     static void subscription_callback(const void * msgin);
     void handle_cmd_vel(const geometry_msgs__msg__Twist* msg);
+    void commandWheel(IncrementalMotorEncoder& encoder, float command, bool inverted_polarity);
 };
 
 #endif
