@@ -76,6 +76,23 @@ import operator
                     <div id="ledState" style="text-align: center; font-size: 1.5em; font-weight: bold;">Unknown</div>
                 </section>
 
+                <!-- Motor Speed Control -->
+                <section style="border: 1px solid #999; padding: 0.5rem; margin-bottom: 1rem;">
+                    <h2 style="margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 0.5rem;">🚗 Motor Speed Control</h2>
+                    <div style="text-align: center; margin-bottom: 0.5rem;">
+                        <label for="motorSpeed" style="font-weight: bold;">Max Speed (encoder counts/sec):</label>
+                        <input type="number" id="motorSpeed" min="100" max="5000" value="1000" step="100" style="width: 100px; margin-left: 0.5rem;">
+                        <button type="button" onclick="setMotorSpeed()" style="margin-left: 0.5rem;">Set Speed</button>
+                    </div>
+                    <div style="text-align: center;">
+                        <button type="button" onclick="setMotorSpeedValue(500)" style="margin: 0 0.25rem;">Slow</button>
+                        <button type="button" onclick="setMotorSpeedValue(1000)" style="margin: 0 0.25rem;">Normal</button>
+                        <button type="button" onclick="setMotorSpeedValue(2000)" style="margin: 0 0.25rem;">Fast</button>
+                        <button type="button" onclick="setMotorSpeedValue(3000)" style="margin: 0 0.25rem;">Turbo</button>
+                    </div>
+                    <div id="motorStatus" style="text-align: center; margin-top: 0.5rem; font-size: 0.9em; color: #666;">Current max speed: 1000 counts/sec</div>
+                </section>
+
                 <!-- Servo Control -->
                 <section style="border: 1px solid #999; padding: 0.5rem; margin-bottom: 1rem;">
                     <h2 style="margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 0.5rem;">🤖 Servo Control</h2>
@@ -189,6 +206,8 @@ import operator
                         <dl style="margin: 0;">
                             <dt><strong>Movement Topic:</strong></dt>
                             <dd style="margin-bottom: 0.5rem;"><code>/cmd_vel</code> (geometry_msgs/Twist)</dd>
+                            <dt><strong>Motor Speed Topic:</strong></dt>
+                            <dd style="margin-bottom: 0.5rem;"><code>/motor_speed</code> (std_msgs/Float32)</dd>
                             <dt><strong>Servo Topic:</strong></dt>
                             <dd style="margin-bottom: 0.5rem;"><code>/servo_position</code> (std_msgs/Int32)</dd>
                             <dt><strong>LED Topic:</strong></dt>

@@ -21,7 +21,8 @@ CmdVelSubscriber* CmdVelSubscriber::_instance = nullptr;
 
 CmdVelSubscriber::CmdVelSubscriber(IncrementalMotorEncoder& encoder_m1, IncrementalMotorEncoder& encoder_m2,
                                    IncrementalMotorEncoder& encoder_m3, IncrementalMotorEncoder& encoder_m4)
-    : _encoder_m1(encoder_m1), _encoder_m2(encoder_m2), _encoder_m3(encoder_m3), _encoder_m4(encoder_m4) {
+    : _encoder_m1(encoder_m1), _encoder_m2(encoder_m2), _encoder_m3(encoder_m3), _encoder_m4(encoder_m4),
+      _speed_scaling(1000.0f) {  // Default scaling: 1000 encoder counts/second at full speed
     _instance = this;
 }
 
@@ -30,15 +31,31 @@ CmdVelSubscriber::~CmdVelSubscriber() {
 }
 
 void CmdVelSubscriber::setup(rcl_node_t* node, rclc_support_t* support, rclc_executor_t* executor) {
-    // Create subscriber
+    // Create cmd_vel subscriber
     RCCHECK(rclc_subscription_init_default(
         &_subscriber,
         node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist),
         "cmd_vel"));
 
-    // Add subscription to executor
+    // Add cmd_vel subscription to executor
     RCCHECK(rclc_executor_add_subscription(executor, &_subscriber, &_msg, subscription_callback, ON_NEW_DATA));
+
+    // Create motor speed subscriber
+    RCCHECK(rclc_subscription_init_default(
+        &_speed_subscriber,
+        node,
+        ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32),
+        "motor_speed"));
+
+    // Add speed subscription to executor
+    RCCHECK(rclc_executor_add_subscription(executor, &_speed_subscriber, &_speed_msg, speed_subscription_callback, ON_NEW_DATA));
+}
+
+void CmdVelSubscriber::setSpeedScaling(float scaling) {
+    _speed_scaling = constrain(scaling, 100.0f, 5000.0f); // Reasonable limits
+    Serial.print("Motor speed scaling set to: ");
+    Serial.println(_speed_scaling);
 }
 
 void CmdVelSubscriber::subscription_callback(const void * msgin) {
@@ -46,6 +63,17 @@ void CmdVelSubscriber::subscription_callback(const void * msgin) {
     if (_instance) {
         _instance->handle_cmd_vel(msg);
     }
+}
+
+void CmdVelSubscriber::speed_subscription_callback(const void * msgin) {
+    const std_msgs__msg__Float32 * msg = (const std_msgs__msg__Float32 *)msgin;
+    if (_instance) {
+        _instance->handle_speed_scaling(msg);
+    }
+}
+
+void CmdVelSubscriber::handle_speed_scaling(const std_msgs__msg__Float32* msg) {
+    setSpeedScaling(msg->data);
 }
 
 void CmdVelSubscriber::handle_cmd_vel(const geometry_msgs__msg__Twist* msg) {
@@ -101,8 +129,8 @@ void CmdVelSubscriber::commandWheel(IncrementalMotorEncoder& encoder, float comm
         return;
     }
 
-    // Set target speed proportional to command (adjust scale as needed)
-    float target_speed = clipped * 1000.0f; // Example scale, tune based on encoder resolution
+    // Set target speed proportional to command using adjustable scaling
+    float target_speed = clipped * _speed_scaling;
     if (inverted_polarity) {
         target_speed = -target_speed;
     }

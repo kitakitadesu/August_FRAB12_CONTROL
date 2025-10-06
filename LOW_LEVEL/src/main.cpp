@@ -78,8 +78,8 @@ void setup() {
   RCCHECK(rclc_node_init_default(&node, "micro_ros_platformio_node", "", &support));
   Serial.println("Node created");
 
-  // create executor (now handles 5 handles: two publishers and three subscribers)
-  RCCHECK(rclc_executor_init(&executor, &support.context, 5, &allocator));
+  // create executor (now handles 6 handles: two publishers and four subscribers)
+  RCCHECK(rclc_executor_init(&executor, &support.context, 6, &allocator));
   Serial.println("Executor created");
 
   // Setup ROS2 nodes

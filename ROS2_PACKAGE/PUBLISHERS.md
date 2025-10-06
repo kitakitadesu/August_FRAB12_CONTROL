@@ -30,11 +30,20 @@ This node publishes to two topics for robot control:
 - `F`: Toggle servo position between 0° and 180°
 
 **Data Explanation:**
-- `data`: Servo angle in degrees (0-180) or speed setting
 - Positive values (0-180): Set servo position at current speed
 - Negative values (-1 to -360): Set servo speed to |value| degrees/second
 - Default speed: 90 degrees/second
 - Toggle behavior: 0° → 180° → 0° → 180° ...
+
+### Motor Speed Control
+
+**Topic:** `/motor_speed`
+**Datatype:** `std_msgs/Float32`
+**Publishing Rate:** On change
+**Description:**
+- `data`: Maximum motor speed scaling in encoder counts/second (100-5000)
+- Controls the maximum speed for all motors when receiving cmd_vel commands
+- Default: 1000 encoder counts/second at full cmd_vel input
 
 ## Usage
 

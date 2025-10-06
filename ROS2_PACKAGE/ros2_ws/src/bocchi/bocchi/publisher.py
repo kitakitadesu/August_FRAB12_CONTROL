@@ -2,13 +2,11 @@ import rclpy
 from rclpy.node import Node
 import signal
 from geometry_msgs.msg import Twist
-from std_msgs.msg import Int32, Bool
+from std_msgs.msg import Int32, Bool, Float32
 import sys
 import argparse
 import threading
-import json
 import os
-import tempfile
 import socket
 import time
 from flask import Flask, request, jsonify, send_from_directory, render_template_string
@@ -1115,9 +1113,11 @@ class MinimalPublisher(Node):
     def __init__(self, webui_mode='both'):
         super().__init__('minimal_publisher')
         self.webui_mode = webui_mode
+        self.port = port
         self.twist_publisher = self.create_publisher(Twist, 'cmd_vel', 10)
         self.servo_publisher = self.create_publisher(Int32, 'servo_position', 10)
         self.led_publisher = self.create_publisher(Bool, 'toggle_led', 10)
+        self.motor_speed_publisher = self.create_publisher(Float32, 'motor_speed', 10)
         self.led_status_subscriber = self.create_subscription(Bool, 'led_status', self.led_status_callback, 10)
 
         # Optimized timer - only publish when key changes
@@ -1351,6 +1351,8 @@ class MinimalPublisher(Node):
                                         await self.handle_websocket_send_key_batch(data, websocket)
                                     elif message_type == 'get_routes':
                                         await self.handle_websocket_get_routes(data, websocket)
+                                    elif message_type == 'motor_speed':
+                                        await self.handle_websocket_motor_speed(data, websocket)
                                     elif message_type == 'servo_speed':
                                         await self.handle_websocket_servo_speed(data, websocket)
                                     elif message_type == 'servo_position':
@@ -1912,6 +1914,45 @@ class MinimalPublisher(Node):
                 error_response['request_id'] = data.get('request_id')
             await websocket.send(json.dumps(error_response))
 
+    async def handle_websocket_motor_speed(self, data, websocket):
+        """Handle motor speed setting via WebSocket"""
+        try:
+            speed = data.get('speed', 1000)
+            request_id = data.get('request_id')
+
+            # Validate speed range
+            if not (100 <= speed <= 5000):
+                raise ValueError("Speed must be between 100 and 5000 encoder counts/second")
+
+            # Publish motor speed scaling
+            self.publish_motor_speed(speed)
+
+            response_data = {
+                'type': 'motor_speed_response',
+                'success': True,
+                'speed': speed,
+                'message': f'Motor speed set to {speed} encoder counts/second',
+                'timestamp': int(time.time() * 1000)
+            }
+
+            if request_id:
+                response_data['request_id'] = request_id
+
+            await websocket.send(json.dumps(response_data))
+            print(f"Motor speed set to {speed} encoder counts/second via WebSocket")
+
+        except Exception as e:
+            error_response = {
+                'type': 'motor_speed_response',
+                'success': False,
+                'error': str(e),
+                'timestamp': int(time.time() * 1000)
+            }
+            if data.get('request_id'):
+                error_response['request_id'] = data.get('request_id')
+            await websocket.send(json.dumps(error_response))
+            print(f"Error setting motor speed via WebSocket: {e}")
+
     async def handle_websocket_servo_speed(self, data, websocket):
         """Handle servo speed setting via WebSocket"""
         try:
@@ -1999,7 +2040,7 @@ class MinimalPublisher(Node):
             # List of supported message types
             supported_types = [
                 'keyboard', 'key_down', 'key_up', 'get_status', 'test_connection',
-                'send_key', 'send_key_batch', 'get_routes', 'servo_speed', 'servo_position', 'ping', 'client_connected'
+                'send_key', 'send_key_batch', 'get_routes', 'motor_speed', 'servo_speed', 'servo_position', 'ping', 'client_connected'
             ]
 
             # Find similar message types (basic similarity check)
@@ -2105,6 +2146,16 @@ class MinimalPublisher(Node):
             self.twist_publisher.publish(msg)
         except Exception as e:
             print(f"Error publishing Twist message: {e}")
+
+    def publish_motor_speed(self, speed):
+        """Publish motor speed scaling message"""
+        try:
+            msg = Float32()
+            msg.data = speed
+            self.motor_speed_publisher.publish(msg)
+            print(f"Published motor speed scaling: {speed}")
+        except Exception as e:
+            print(f"Error publishing motor speed message: {e}")
 
     def publish_servo(self, position):
         """Publish servo position message"""

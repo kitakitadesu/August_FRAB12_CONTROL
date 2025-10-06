@@ -587,6 +587,27 @@ class WebSocketKeyboardInterface {
         this.addDebugMessage('Test key sequence completed');
     }
 
+    async setMotorSpeed(speed) {
+        try {
+            const response = await this.sendWebSocketMessage({
+                type: 'motor_speed',
+                speed: speed,
+                timestamp: Date.now()
+            }, true);
+
+            if (response.success) {
+                this.addDebugMessage(`Motor speed set to ${speed} encoder counts/second`);
+                return true;
+            } else {
+                this.addDebugMessage(`Failed to set motor speed: ${response.error}`);
+                return false;
+            }
+        } catch (error) {
+            this.addDebugMessage(`Error setting motor speed: ${error.message}`);
+            return false;
+        }
+    }
+
     async toggleLED() {
         this.addDebugMessage('Toggling LED...');
         await this.sendKey('L', 76);
@@ -690,6 +711,21 @@ document.addEventListener('DOMContentLoaded', () => {
     window.clearMessages = () => keyboardInterface.clearMessages();
     window.sendTestKeys = () => keyboardInterface.sendTestKeys();
     window.toggleLED = () => keyboardInterface.toggleLED();
+    window.setMotorSpeed = () => {
+        const speedInput = document.getElementById('motorSpeed');
+        const speed = parseInt(speedInput.value);
+        if (speed >= 100 && speed <= 5000) {
+            keyboardInterface.setMotorSpeed(speed);
+            document.getElementById('motorStatus').textContent = `Current max speed: ${speed} counts/sec`;
+        } else {
+            alert('Please enter a speed between 100 and 5000 encoder counts/second');
+        }
+    };
+    window.setMotorSpeedValue = (speed) => {
+        document.getElementById('motorSpeed').value = speed;
+        keyboardInterface.setMotorSpeed(speed);
+        document.getElementById('motorStatus').textContent = `Current max speed: ${speed} counts/sec`;
+    };
     window.setServoSpeed = () => {
         const speedInput = document.getElementById('servoSpeed');
         const speed = parseInt(speedInput.value);
