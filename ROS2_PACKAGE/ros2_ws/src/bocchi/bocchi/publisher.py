@@ -2,7 +2,7 @@ import rclpy
 from rclpy.node import Node
 import signal
 from geometry_msgs.msg import Twist
-from std_msgs.msg import Int32, Bool
+from std_msgs.msg import Int32, Bool, Float32
 import sys
 import argparse
 import threading
@@ -1112,6 +1112,8 @@ class MinimalPublisher(Node):
         self.webui_mode = webui_mode
         self.twist_publisher = self.create_publisher(Twist, 'cmd_vel', 10)
         self.servo_publisher = self.create_publisher(Int32, 'servo_position', 10)
+        self.motor_speed_publisher = self.create_publisher(Float32, 'motor_speed', 10)
+        self.servo_speed_publisher = self.create_publisher(Float32, 'servo_speed', 10)
         self.led_publisher = self.create_publisher(Bool, 'toggle_led', 10)
         self.led_status_subscriber = self.create_subscription(Bool, 'led_status', self.led_status_callback, 10)
 
@@ -1334,6 +1336,10 @@ class MinimalPublisher(Node):
                                         await self.handle_websocket_send_key_batch(data, websocket)
                                     elif message_type == 'get_routes':
                                         await self.handle_websocket_get_routes(data, websocket)
+                                    elif message_type == 'set_motor_speed':
+                                        await self.handle_websocket_set_motor_speed(data, websocket)
+                                    elif message_type == 'set_servo_speed':
+                                        await self.handle_websocket_set_servo_speed(data, websocket)
                                     elif message_type == 'ping':
                                         # Handle ping/pong for connection monitoring
                                         pong_response = {
@@ -1891,25 +1897,90 @@ class MinimalPublisher(Node):
                 error_response['request_id'] = data.get('request_id')
             await websocket.send(json.dumps(error_response))
 
+    async def handle_websocket_set_motor_speed(self, data, websocket):
+        """Handle motor speed setting via WebSocket"""
+        try:
+            speed = data.get('speed', 1000.0)
+            request_id = data.get('request_id')
+
+            # Publish motor speed
+            self.publish_motor_speed(speed)
+
+            response_data = {
+                'type': 'set_motor_speed_response',
+                'success': True,
+                'speed': speed,
+                'timestamp': int(time.time() * 1000)
+            }
+
+            if request_id:
+                response_data['request_id'] = request_id
+
+            await websocket.send(json.dumps(response_data))
+
+        except Exception as e:
+            error_response = {
+                'type': 'set_motor_speed_response',
+                'success': False,
+                'error': str(e),
+                'timestamp': int(time.time() * 1000)
+            }
+            if data.get('request_id'):
+                error_response['request_id'] = data.get('request_id')
+            await websocket.send(json.dumps(error_response))
+
+    async def handle_websocket_set_servo_speed(self, data, websocket):
+        """Handle servo speed setting via WebSocket"""
+        try:
+            speed = data.get('speed', 90.0)
+            request_id = data.get('request_id')
+
+            # Publish servo speed
+            self.publish_servo_speed(speed)
+
+            response_data = {
+                'type': 'set_servo_speed_response',
+                'success': True,
+                'speed': speed,
+                'timestamp': int(time.time() * 1000)
+            }
+
+            if request_id:
+                response_data['request_id'] = request_id
+
+            await websocket.send(json.dumps(response_data))
+
+        except Exception as e:
+            error_response = {
+                'type': 'set_servo_speed_response',
+                'success': False,
+                'error': str(e),
+                'timestamp': int(time.time() * 1000)
+            }
+            if data.get('request_id'):
+                error_response['request_id'] = data.get('request_id')
+            await websocket.send(json.dumps(error_response))
+
     async def handle_websocket_unknown_message(self, data, websocket):
         """Enhanced unknown message handler with helpful suggestions"""
         try:
             request_id = data.get('request_id')
             message_type = data.get('type', 'unknown')
-            
+
             # List of supported message types
             supported_types = [
                 'keyboard', 'key_down', 'key_up', 'get_status', 'test_connection',
-                'send_key', 'send_key_batch', 'get_routes', 'ping', 'client_connected'
+                'send_key', 'send_key_batch', 'get_routes', 'ping', 'client_connected',
+                'set_motor_speed', 'set_servo_speed'
             ]
-            
+
             # Find similar message types (basic similarity check)
             suggestions = []
             if message_type and message_type != 'unknown':
                 for supported in supported_types:
                     if message_type.lower() in supported.lower() or supported.lower() in message_type.lower():
                         suggestions.append(supported)
-            
+
             response_data = {
                 'type': 'unknown_message_error',
                 'success': False,
@@ -1920,10 +1991,10 @@ class MinimalPublisher(Node):
                 'help': 'Use test_connection to verify connectivity or get_status for server information',
                 'timestamp': int(time.time() * 1000)
             }
-            
+
             if request_id:
                 response_data['request_id'] = request_id
-                
+
             # Use enhanced send method if available
             api_handler = self.api_handler or (self.flask_app.config.get('api_handler') if self.flask_app else None)
             if api_handler and hasattr(api_handler.websocket_manager, 'send_to_client'):
@@ -1931,9 +2002,9 @@ class MinimalPublisher(Node):
                 api_handler.websocket_manager.stats['errors'] += 1
             else:
                 await websocket.send(json.dumps(response_data))
-                
+
             print(f"Unknown WebSocket message type '{message_type}' - suggested: {suggestions}")
-            
+
         except Exception as e:
             print(f"Error handling unknown WebSocket message: {e}")
 
@@ -2015,6 +2086,24 @@ class MinimalPublisher(Node):
             self.servo_publisher.publish(msg)
         except Exception as e:
             print(f"Error publishing servo message: {e}")
+
+    def publish_motor_speed(self, speed):
+        """Publish motor speed scaling message"""
+        try:
+            msg = Float32()
+            msg.data = speed
+            self.motor_speed_publisher.publish(msg)
+        except Exception as e:
+            print(f"Error publishing motor speed message: {e}")
+
+    def publish_servo_speed(self, speed):
+        """Publish servo speed message"""
+        try:
+            msg = Float32()
+            msg.data = speed
+            self.servo_speed_publisher.publish(msg)
+        except Exception as e:
+            print(f"Error publishing servo speed message: {e}")
 
     def publish_led_toggle(self, state):
         """Publish LED toggle message"""

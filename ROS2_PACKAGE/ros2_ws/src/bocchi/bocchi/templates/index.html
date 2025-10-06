@@ -285,6 +285,25 @@ import operator
 
         </div>
 
+        <!-- Speed Control Section -->
+        <div style="border: 2px solid #666; padding: 1rem; margin-bottom: 1rem;">
+            <h2 style="margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 0.5rem;">Speed Controls</h2>
+            <div style="display: flex; gap: 2rem; justify-content: space-around;">
+                <div style="flex: 1;">
+                    <label for="motor-speed-slider"><strong>Motor Speed Scaling:</strong></label><br>
+                    <input type="range" id="motor-speed-slider" min="100" max="5000" value="1000" step="50" style="width: 100%;">
+                    <span id="motor-speed-value">1000</span> counts/sec<br>
+                    <small>Adjusts motor speed scaling factor</small>
+                </div>
+                <div style="flex: 1;">
+                    <label for="servo-speed-slider"><strong>Servo Speed:</strong></label><br>
+                    <input type="range" id="servo-speed-slider" min="10" max="360" value="90" step="5" style="width: 100%;">
+                    <span id="servo-speed-value">90</span> degrees/sec<br>
+                    <small>Adjusts servo movement speed</small>
+                </div>
+            </div>
+        </div>
+
         <!-- Information Sections -->
         <div class="grid-3col">
             
@@ -325,6 +344,16 @@ import operator
                                 <td><code>send_key_batch</code></td>
                                 <td>Client → Server</td>
                                 <td>Send multiple keys</td>
+                            </tr>
+                            <tr>
+                                <td><code>set_motor_speed</code></td>
+                                <td>Client → Server</td>
+                                <td>Set motor speed scaling</td>
+                            </tr>
+                            <tr>
+                                <td><code>set_servo_speed</code></td>
+                                <td>Client → Server</td>
+                                <td>Set servo movement speed</td>
                             </tr>
                             <tr>
                                 <td><code>welcome</code></td>
@@ -582,6 +611,33 @@ import operator
             const keyCodeInput = document.getElementById('manual-key-code');
             if (e.target.value.length === 1 && keyCodeInput) {
                 keyCodeInput.value = e.target.value.charCodeAt(0);
+            }
+        });
+
+        // Speed control sliders
+        document.getElementById('motor-speed-slider')?.addEventListener('input', function(e) {
+            const value = e.target.value;
+            document.getElementById('motor-speed-value').textContent = value;
+            // Send WebSocket message
+            if (window.keyboardInterface && window.keyboardInterface.websocket && window.keyboardInterface.websocket.readyState === WebSocket.OPEN) {
+                window.keyboardInterface.websocket.send(JSON.stringify({
+                    type: 'set_motor_speed',
+                    speed: parseFloat(value),
+                    timestamp: Date.now()
+                }));
+            }
+        });
+
+        document.getElementById('servo-speed-slider')?.addEventListener('input', function(e) {
+            const value = e.target.value;
+            document.getElementById('servo-speed-value').textContent = value;
+            // Send WebSocket message
+            if (window.keyboardInterface && window.keyboardInterface.websocket && window.keyboardInterface.websocket.readyState === WebSocket.OPEN) {
+                window.keyboardInterface.websocket.send(JSON.stringify({
+                    type: 'set_servo_speed',
+                    speed: parseFloat(value),
+                    timestamp: Date.now()
+                }));
             }
         });
 
