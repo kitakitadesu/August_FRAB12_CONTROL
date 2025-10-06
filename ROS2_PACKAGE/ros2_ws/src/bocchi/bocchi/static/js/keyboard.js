@@ -593,6 +593,48 @@ class WebSocketKeyboardInterface {
         this.addDebugMessage('LED toggle command sent');
     }
 
+    async setServoSpeed(speed) {
+        try {
+            const response = await this.sendWebSocketMessage({
+                type: 'servo_speed',
+                speed: speed,
+                timestamp: Date.now()
+            }, true);
+
+            if (response.success) {
+                this.addDebugMessage(`Servo speed set to ${speed} degrees/second`);
+                return true;
+            } else {
+                this.addDebugMessage(`Failed to set servo speed: ${response.error}`);
+                return false;
+            }
+        } catch (error) {
+            this.addDebugMessage(`Error setting servo speed: ${error.message}`);
+            return false;
+        }
+    }
+
+    async moveServo(angle) {
+        try {
+            const response = await this.sendWebSocketMessage({
+                type: 'servo_position',
+                angle: angle,
+                timestamp: Date.now()
+            }, true);
+
+            if (response.success) {
+                this.addDebugMessage(`Servo moved to ${angle} degrees`);
+                return true;
+            } else {
+                this.addDebugMessage(`Failed to move servo: ${response.error}`);
+                return false;
+            }
+        } catch (error) {
+            this.addDebugMessage(`Error moving servo: ${error.message}`);
+            return false;
+        }
+    }
+
     cleanup() {
         // Clear all held keys
         this.heldKeys.clear();
@@ -648,6 +690,17 @@ document.addEventListener('DOMContentLoaded', () => {
     window.clearMessages = () => keyboardInterface.clearMessages();
     window.sendTestKeys = () => keyboardInterface.sendTestKeys();
     window.toggleLED = () => keyboardInterface.toggleLED();
+    window.setServoSpeed = () => {
+        const speedInput = document.getElementById('servoSpeed');
+        const speed = parseInt(speedInput.value);
+        if (speed >= 1 && speed <= 360) {
+            keyboardInterface.setServoSpeed(speed);
+            document.getElementById('servoStatus').textContent = `Current speed: ${speed}°/sec`;
+        } else {
+            alert('Please enter a speed between 1 and 360 degrees/second');
+        }
+    };
+    window.moveServo = (angle) => keyboardInterface.moveServo(angle);
     
     // Handle manual form submissions
     window.submitManualKey = async (event) => {

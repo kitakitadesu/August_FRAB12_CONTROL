@@ -124,5 +124,14 @@ void loop() {
   delay(100);
   rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100));
 
+  // Update speed control for all motors
+  encoderM1.updateSpeedControl();
+  encoderM2.updateSpeedControl();
+  encoderM3.updateSpeedControl();
+  encoderM4.updateSpeedControl();
+
+  // Update servo position
+  servo1.update();
+
   digitalWrite(LED_BUILTIN, toggle_led_subscriber.isLedEnabled());
 }

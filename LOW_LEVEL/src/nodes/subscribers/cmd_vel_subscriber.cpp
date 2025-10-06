@@ -97,21 +97,15 @@ void CmdVelSubscriber::commandWheel(IncrementalMotorEncoder& encoder, float comm
     const float magnitude = fabsf(clipped);
 
     if (magnitude < kDeadzone) {
-        encoder.stop();
+        encoder.setTargetSpeed(0.0f);
         return;
     }
 
-    const uint8_t pwm = static_cast<uint8_t>(constrain(magnitude * 255.0f, 0.0f, 255.0f));
-    encoder.setSpeed(pwm);
-
-    bool forward = (clipped > 0.0f);
+    // Set target speed proportional to command (adjust scale as needed)
+    float target_speed = clipped * 1000.0f; // Example scale, tune based on encoder resolution
     if (inverted_polarity) {
-        forward = !forward;
+        target_speed = -target_speed;
     }
 
-    if (forward) {
-        encoder.forward();
-    } else {
-        encoder.backward();
-    }
+    encoder.setTargetSpeed(target_speed);
 }

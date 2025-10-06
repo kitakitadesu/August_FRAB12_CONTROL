@@ -5,7 +5,7 @@
 ServoCommandSubscriber* ServoCommandSubscriber::_instance = nullptr;
 
 ServoCommandSubscriber::ServoCommandSubscriber(ServoMotor& servo)
-    : _servo(servo) {
+    : _servo(servo), _speedDegreesPerSecond(90.0f) {  // Default speed: 90 degrees/second
     _instance = this;
 }
 
@@ -33,6 +33,17 @@ void ServoCommandSubscriber::subscription_callback(const void* msgin) {
 }
 
 void ServoCommandSubscriber::handleServoCommand(const std_msgs__msg__Int32* msg) {
-    const float target_degrees = static_cast<float>(msg->data);
-    _servo.writeAngle(target_degrees);
+    int32_t value = msg->data;
+
+    if (value >= 0) {
+        // Positive value: set position with current speed
+        const float target_degrees = static_cast<float>(value);
+        _servo.writeAngleWithSpeed(target_degrees, _speedDegreesPerSecond);
+    } else {
+        // Negative value: set speed (absolute value)
+        _speedDegreesPerSecond = static_cast<float>(-value);
+        Serial.print("Servo speed set to: ");
+        Serial.print(_speedDegreesPerSecond);
+        Serial.println(" degrees/second");
+    }
 }

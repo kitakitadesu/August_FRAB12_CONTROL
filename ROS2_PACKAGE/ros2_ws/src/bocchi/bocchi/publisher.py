@@ -1351,6 +1351,10 @@ class MinimalPublisher(Node):
                                         await self.handle_websocket_send_key_batch(data, websocket)
                                     elif message_type == 'get_routes':
                                         await self.handle_websocket_get_routes(data, websocket)
+                                    elif message_type == 'servo_speed':
+                                        await self.handle_websocket_servo_speed(data, websocket)
+                                    elif message_type == 'servo_position':
+                                        await self.handle_websocket_servo_position(data, websocket)
                                     elif message_type == 'ping':
                                         # Handle ping/pong for connection monitoring
                                         pong_response = {
@@ -1908,25 +1912,103 @@ class MinimalPublisher(Node):
                 error_response['request_id'] = data.get('request_id')
             await websocket.send(json.dumps(error_response))
 
+    async def handle_websocket_servo_speed(self, data, websocket):
+        """Handle servo speed setting via WebSocket"""
+        try:
+            speed = data.get('speed', 90)
+            request_id = data.get('request_id')
+
+            # Validate speed range
+            if not (1 <= speed <= 360):
+                raise ValueError("Speed must be between 1 and 360 degrees/second")
+
+            # Publish negative value to indicate speed setting
+            self.publish_servo(-speed)
+
+            response_data = {
+                'type': 'servo_speed_response',
+                'success': True,
+                'speed': speed,
+                'message': f'Servo speed set to {speed} degrees/second',
+                'timestamp': int(time.time() * 1000)
+            }
+
+            if request_id:
+                response_data['request_id'] = request_id
+
+            await websocket.send(json.dumps(response_data))
+            print(f"Servo speed set to {speed} degrees/second via WebSocket")
+
+        except Exception as e:
+            error_response = {
+                'type': 'servo_speed_response',
+                'success': False,
+                'error': str(e),
+                'timestamp': int(time.time() * 1000)
+            }
+            if data.get('request_id'):
+                error_response['request_id'] = data.get('request_id')
+            await websocket.send(json.dumps(error_response))
+            print(f"Error setting servo speed via WebSocket: {e}")
+
+    async def handle_websocket_servo_position(self, data, websocket):
+        """Handle servo position setting via WebSocket"""
+        try:
+            angle = data.get('angle', 0)
+            request_id = data.get('request_id')
+
+            # Validate angle range
+            if not (0 <= angle <= 180):
+                raise ValueError("Angle must be between 0 and 180 degrees")
+
+            # Publish positive value to indicate position setting
+            self.publish_servo(angle)
+
+            response_data = {
+                'type': 'servo_position_response',
+                'success': True,
+                'angle': angle,
+                'message': f'Servo moved to {angle} degrees',
+                'timestamp': int(time.time() * 1000)
+            }
+
+            if request_id:
+                response_data['request_id'] = request_id
+
+            await websocket.send(json.dumps(response_data))
+            print(f"Servo moved to {angle} degrees via WebSocket")
+
+        except Exception as e:
+            error_response = {
+                'type': 'servo_position_response',
+                'success': False,
+                'error': str(e),
+                'timestamp': int(time.time() * 1000)
+            }
+            if data.get('request_id'):
+                error_response['request_id'] = data.get('request_id')
+            await websocket.send(json.dumps(error_response))
+            print(f"Error setting servo position via WebSocket: {e}")
+
     async def handle_websocket_unknown_message(self, data, websocket):
         """Enhanced unknown message handler with helpful suggestions"""
         try:
             request_id = data.get('request_id')
             message_type = data.get('type', 'unknown')
-            
+
             # List of supported message types
             supported_types = [
                 'keyboard', 'key_down', 'key_up', 'get_status', 'test_connection',
-                'send_key', 'send_key_batch', 'get_routes', 'ping', 'client_connected'
+                'send_key', 'send_key_batch', 'get_routes', 'servo_speed', 'servo_position', 'ping', 'client_connected'
             ]
-            
+
             # Find similar message types (basic similarity check)
             suggestions = []
             if message_type and message_type != 'unknown':
                 for supported in supported_types:
                     if message_type.lower() in supported.lower() or supported.lower() in message_type.lower():
                         suggestions.append(supported)
-            
+
             response_data = {
                 'type': 'unknown_message_error',
                 'success': False,
@@ -1937,10 +2019,10 @@ class MinimalPublisher(Node):
                 'help': 'Use test_connection to verify connectivity or get_status for server information',
                 'timestamp': int(time.time() * 1000)
             }
-            
+
             if request_id:
                 response_data['request_id'] = request_id
-                
+
             # Use enhanced send method if available
             api_handler = self.api_handler or (self.flask_app.config.get('api_handler') if self.flask_app else None)
             if api_handler and hasattr(api_handler.websocket_manager, 'send_to_client'):
@@ -1948,9 +2030,9 @@ class MinimalPublisher(Node):
                 api_handler.websocket_manager.stats['errors'] += 1
             else:
                 await websocket.send(json.dumps(response_data))
-                
+
             print(f"Unknown WebSocket message type '{message_type}' - suggested: {suggestions}")
-            
+
         except Exception as e:
             print(f"Error handling unknown WebSocket message: {e}")
 

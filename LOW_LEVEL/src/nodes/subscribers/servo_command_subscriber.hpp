@@ -19,6 +19,7 @@ private:
     ServoMotor& _servo;
     rcl_subscription_t _subscriber;
     std_msgs__msg__Int32 _msg;
+    float _speedDegreesPerSecond;
 
     static ServoCommandSubscriber* _instance;
     static void subscription_callback(const void* msgin);

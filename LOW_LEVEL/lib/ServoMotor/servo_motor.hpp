@@ -10,6 +10,8 @@ public:
 
     void setup();
     void writeAngle(float degrees);
+    void writeAngleWithSpeed(float degrees, float degreesPerSecond);
+    void update();
     void detach();
     float currentAngle() const { return _currentDegrees; }
 
@@ -20,6 +22,9 @@ private:
     uint16_t _maxPulseWidth;
     bool _attached;
     float _currentDegrees;
+    float _targetDegrees;
+    float _speedDegreesPerSecond;
+    unsigned long _lastUpdateTime;
 };
 
 #endif

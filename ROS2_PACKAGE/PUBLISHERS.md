@@ -30,7 +30,10 @@ This node publishes to two topics for robot control:
 - `F`: Toggle servo position between 0° and 180°
 
 **Data Explanation:**
-- `data`: Servo angle in degrees (0 or 180)
+- `data`: Servo angle in degrees (0-180) or speed setting
+- Positive values (0-180): Set servo position at current speed
+- Negative values (-1 to -360): Set servo speed to |value| degrees/second
+- Default speed: 90 degrees/second
 - Toggle behavior: 0° → 180° → 0° → 180° ...
 
 ## Usage
