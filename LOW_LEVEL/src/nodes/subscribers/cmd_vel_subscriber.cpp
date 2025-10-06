@@ -11,8 +11,8 @@ constexpr float kDeadzone = 0.02f;
 // Set to true when a positive command should spin the wheel "backward" due to wiring or mirrored mounting.
 constexpr bool kMotorPolarity[4] = {
     false,  // Motor M1 (top-left)
-    false,  // Motor M2 (bottom-left)
-    false,  // Motor M3 (top-right)
+    false,  // Motor M2 (top-right)
+    false,  // Motor M3 (bottom-left)
     false   // Motor M4 (bottom-right)
 };
 }
@@ -85,8 +85,8 @@ void CmdVelSubscriber::handle_cmd_vel(const geometry_msgs__msg__Twist* msg) {
     const float rotation_component = wz * kRotationGain;
 
     const float front_left  = vx - vy - rotation_component; // M1 (top-left)
-    const float rear_left   = vx + vy - rotation_component; // M2 (bottom-left)
-    const float front_right = vx + vy + rotation_component; // M3 (top-right)
+    const float rear_left   = vx + vy - rotation_component; // M3 (bottom-left)
+    const float front_right = vx + vy + rotation_component; // M2 (top-right)
     const float rear_right  = vx - vy + rotation_component; // M4 (bottom-right)
 
     float wheel_commands[4] = {
@@ -115,8 +115,8 @@ void CmdVelSubscriber::handle_cmd_vel(const geometry_msgs__msg__Twist* msg) {
     wheel_commands[3] /= max_command;
 
     commandWheel(_encoder_m1, wheel_commands[0], kMotorPolarity[0]); // M1 top-left
-    commandWheel(_encoder_m2, wheel_commands[1], kMotorPolarity[1]); // M2 bottom-left
-    commandWheel(_encoder_m3, wheel_commands[2], kMotorPolarity[2]); // M3 top-right
+    commandWheel(_encoder_m3, wheel_commands[1], kMotorPolarity[1]); // M3 bottom-left
+    commandWheel(_encoder_m2, wheel_commands[2], kMotorPolarity[2]); // M2 top-right
     commandWheel(_encoder_m4, wheel_commands[3], kMotorPolarity[3]); // M4 bottom-right
 }
 

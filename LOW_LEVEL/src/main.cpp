@@ -27,13 +27,13 @@ rcl_node_t node;
 
 // Motor and Encoder instances
 DCMotor motorM1(0, 1, 2);    // GP0, GP1, GP2
-DCMotor motorM2(3, 4, 5);    // GP3, GP4, GP5
-DCMotor motorM3(6, 7, 8);    // GP6, GP7, GP8
+DCMotor motorM2(6, 7, 8);    // GP6, GP7, GP8 - top-right
+DCMotor motorM3(3, 4, 5);    // GP3, GP4, GP5 - bottom-left
 DCMotor motorM4(9, 10, 11);  // GP9, GP10, GP11
 
 IncrementalMotorEncoder encoderM1(motorM1, 12, 13);   // GP12, GP13
-IncrementalMotorEncoder encoderM2(motorM2, 14, 15);   // GP14, GP15
-IncrementalMotorEncoder encoderM3(motorM3, 16, 17);   // GP16, GP17
+IncrementalMotorEncoder encoderM2(motorM2, 16, 17);   // GP16, GP17 - top-right
+IncrementalMotorEncoder encoderM3(motorM3, 14, 15);   // GP14, GP15 - bottom-left
 IncrementalMotorEncoder encoderM4(motorM4, 18, 19);   // GP18, GP19
 
 ServoMotor servo1(20);  // GP20
