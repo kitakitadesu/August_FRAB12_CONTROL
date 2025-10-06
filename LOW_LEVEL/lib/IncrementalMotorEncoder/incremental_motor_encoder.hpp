@@ -18,6 +18,11 @@ public:
     long getPosition();
     void resetPosition();
 
+    // Speed control methods
+    void setTargetSpeed(float targetSpeed);  // Target speed in encoder counts per second
+    void updateSpeedControl();  // Call this periodically to update PID control
+    float getCurrentSpeed();  // Get current speed in encoder counts per second
+
 private:
     DCMotor& _motor;
     int _encoderPinA;
@@ -26,10 +31,24 @@ private:
     volatile int _lastStateA;
     volatile int _lastStateB;
 
+    // Speed control variables
+    float _targetSpeed;
+    float _currentSpeed;
+    unsigned long _lastUpdateTime;
+    long _lastPosition;
+    float _integral;
+    float _previousError;
+
+    // PID constants (tune these)
+    const float Kp = 0.5f;
+    const float Ki = 0.1f;
+    const float Kd = 0.01f;
+
     static IncrementalMotorEncoder* _instance;  // For interrupt handling
 
     static void handleEncoderInterrupt();
     void updatePosition();
+    void updateCurrentSpeed();
 };
 
 #endif

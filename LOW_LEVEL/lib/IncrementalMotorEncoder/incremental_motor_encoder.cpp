@@ -3,7 +3,8 @@
 IncrementalMotorEncoder* IncrementalMotorEncoder::_instance = nullptr;
 
 IncrementalMotorEncoder::IncrementalMotorEncoder(DCMotor& motor, int encoderPinA, int encoderPinB)
-    : _motor(motor), _encoderPinA(encoderPinA), _encoderPinB(encoderPinB), _position(0), _lastStateA(0), _lastStateB(0) {
+    : _motor(motor), _encoderPinA(encoderPinA), _encoderPinB(encoderPinB), _position(0), _lastStateA(0), _lastStateB(0),
+      _targetSpeed(0.0f), _currentSpeed(0.0f), _lastUpdateTime(0), _lastPosition(0), _integral(0.0f), _previousError(0.0f) {
     _instance = this;
 }
 
@@ -82,4 +83,43 @@ void IncrementalMotorEncoder::updatePosition() {
 
     _lastStateA = stateA;
     _lastStateB = stateB;
+}
+
+// Speed control methods
+void IncrementalMotorEncoder::setTargetSpeed(float targetSpeed) {
+    _targetSpeed = targetSpeed;
+    if (_targetSpeed == 0.0f) {
+        stop();
+    } else if (_targetSpeed > 0.0f) {
+        forward();
+    } else {
+        backward();
+    }
+}
+
+void IncrementalMotorEncoder::updateSpeedControl() {
+    updateCurrentSpeed();
+    float error = _targetSpeed - _currentSpeed;
+    _integral += error;
+    float derivative = error - _previousError;
+    float output = Kp * error + Ki * _integral + Kd * derivative;
+    _previousError = error;
+    int pwm = constrain((int)output, -255, 255);
+    setSpeed(abs(pwm));
+}
+
+float IncrementalMotorEncoder::getCurrentSpeed() {
+    return _currentSpeed;
+}
+
+void IncrementalMotorEncoder::updateCurrentSpeed() {
+    unsigned long currentTime = millis();
+    long currentPosition = getPosition();
+    unsigned long deltaTime = currentTime - _lastUpdateTime;
+    if (deltaTime > 0) {
+        long deltaPosition = currentPosition - _lastPosition;
+        _currentSpeed = (float)deltaPosition / (deltaTime / 1000.0f);
+    }
+    _lastUpdateTime = currentTime;
+    _lastPosition = currentPosition;
 }
