@@ -69,18 +69,23 @@ void IncrementalMotorEncoder::updateSpeedControl() {
         long position_diff = current_position - _last_position;
         _current_speed = position_diff / dt; // Speed in encoder counts per second
 
-        Serial.print("Target Speed: ");
-        Serial.print(_target_speed);
-        Serial.print(", Current Speed: ");
-        Serial.println(_current_speed);
+        // Debug output every 10th update to reduce spam
+        static int debug_counter = 0;
+        if (++debug_counter >= 10) {
+            Serial.print("Target Speed: ");
+            Serial.print(_target_speed);
+            Serial.print(", Current Speed: ");
+            Serial.println(_current_speed);
+            debug_counter = 0;
+        }
 
         float pid_output = _pid.update(_target_speed, _current_speed, dt);
         uint8_t pwm = constrain(abs(pid_output), 0, 255);
 
-        Serial.print("PID Output: ");
-        Serial.print(pid_output);
-        Serial.print(", PWM: ");
-        Serial.println(pwm);
+        // Minimum PWM to overcome motor stiction
+        if (pwm > 0 && pwm < 50) {
+            pwm = 50;
+        }
 
         _motor.setSpeed(pwm);
 
