@@ -255,7 +255,7 @@ class TkinterGUI:
         key_code = event.keycode
         if key_code not in self.pressed_keys:
             self.pressed_keys.add(key_code)
-            self.publisher_node.key_manager.update_key(key_code, True)
+            self.publisher_node.update_key_state(key_code, True)
             self.log_status(f"Key pressed: {event.char} (code: {key_code})")
 
     def on_key_release(self, event):
@@ -263,7 +263,7 @@ class TkinterGUI:
         key_code = event.keycode
         if key_code in self.pressed_keys:
             self.pressed_keys.remove(key_code)
-            self.publisher_node.key_manager.update_key(key_code, False)
+            self.publisher_node.update_key_state(key_code, False)
             self.log_status(f"Key released: {event.char} (code: {key_code})")
 
     def manual_move(self, direction):
@@ -271,29 +271,30 @@ class TkinterGUI:
         key_map = {'w': 119, 's': 115, 'a': 97, 'd': 100}
         if direction in key_map:
             key_code = key_map[direction]
-            self.publisher_node.key_manager.update_key(key_code, True)
+            self.publisher_node.update_key_state(key_code, True)
             # Auto-release after a short delay for button presses
-            self.root.after(200, lambda: self.publisher_node.key_manager.update_key(key_code, False))
+            self.root.after(200, lambda: self.publisher_node.update_key_state(key_code, False))
             self.log_status(f"Manual move: {direction.upper()}")
 
     def stop_movement(self):
         """Stop all movement"""
         # Release all movement keys
         for key in [119, 115, 97, 100]:  # w, s, a, d
-            if key in self.publisher_node.key_manager.current_keys:
-                self.publisher_node.key_manager.update_key(key, False)
+            if key in self.pressed_keys:
+                self.pressed_keys.discard(key)
+            self.publisher_node.update_key_state(key, False)
         self.log_status("Movement stopped")
 
     def toggle_servo(self):
         """Toggle servo position"""
-        self.publisher_node.key_manager.update_key(102, True)  # 'f' key
-        self.root.after(100, lambda: self.publisher_node.key_manager.update_key(102, False))
+        self.publisher_node.update_key_state(102, True)  # 'f' key
+        self.root.after(100, lambda: self.publisher_node.update_key_state(102, False))
         self.log_status("Servo toggle requested")
 
     def toggle_led(self):
         """Toggle LED state"""
-        self.publisher_node.key_manager.update_key(108, True)  # 'l' key
-        self.root.after(100, lambda: self.publisher_node.key_manager.update_key(108, False))
+        self.publisher_node.update_key_state(108, True)  # 'l' key
+        self.root.after(100, lambda: self.publisher_node.update_key_state(108, False))
         self.log_status("LED toggle requested")
 
     def update_motor_speed(self, value):
@@ -325,8 +326,96 @@ class TkinterGUI:
         """Start the GUI main loop"""
         self.root.mainloop()
 
-class TkinterPublisher(Node):
-    """ROS2 Publisher with Tkinter GUI interface"""
+class TkinterPublisher:
+    """Tkinter GUI with ROS2 Publisher functionality"""
+
+    def __init__(self):
+        # ROS2 components will be initialized in a separate thread
+        self.ros_node = None
+        self.ros_thread = None
+        self.running = False
+
+        # Initialize Tkinter GUI first (must be in main thread)
+        self.gui = TkinterGUI(self)
+
+        # Start ROS2 in a separate thread
+        self.start_ros_node()
+
+    def start_ros_node(self):
+        """Start ROS2 node in a separate thread"""
+        def ros_main():
+            try:
+                rclpy.init()
+
+                # Create the ROS2 node
+                self.ros_node = RosNode()
+                self.running = True
+
+                print("ROS2 node started in background thread")
+                rclpy.spin(self.ros_node)
+
+            except Exception as e:
+                print(f"Error in ROS thread: {e}")
+            finally:
+                if self.ros_node:
+                    self.ros_node.destroy_node()
+                try:
+                    rclpy.shutdown()
+                except Exception as e:
+                    print(f"Error during ROS shutdown: {e}")
+
+        self.ros_thread = threading.Thread(target=ros_main, daemon=True)
+        self.ros_thread.start()
+
+        # Give ROS2 time to initialize
+        time.sleep(1)
+
+    def publish_twist(self, linear_x, linear_y, linear_z, angular_x, angular_y, angular_z):
+        """Publish twist message through ROS2 node"""
+        if self.ros_node:
+            self.ros_node.publish_twist(linear_x, linear_y, linear_z, angular_x, angular_y, angular_z)
+
+    def publish_servo(self, position):
+        """Publish servo position through ROS2 node"""
+        if self.ros_node:
+            self.ros_node.publish_servo(position)
+
+    def publish_motor_speed(self, speed):
+        """Publish motor speed through ROS2 node"""
+        if self.ros_node:
+            self.ros_node.publish_motor_speed(speed)
+
+    def publish_servo_speed(self, speed):
+        """Publish servo speed through ROS2 node"""
+        if self.ros_node:
+            self.ros_node.publish_servo_speed(speed)
+
+    def publish_led_toggle(self, state):
+        """Publish LED toggle through ROS2 node"""
+        if self.ros_node:
+            self.ros_node.publish_led_toggle(state)
+
+    def update_key_state(self, key_code, is_pressed):
+        """Update key state in ROS2 node"""
+        if self.ros_node:
+            self.ros_node.update_key_state(key_code, is_pressed)
+
+    def run_gui(self):
+        """Run the Tkinter GUI main loop"""
+        self.gui.run()
+
+    def shutdown(self):
+        """Shutdown the application"""
+        self.running = False
+        if self.ros_node:
+            self.ros_node.destroy_node()
+        try:
+            rclpy.shutdown()
+        except Exception as e:
+            print(f"Error during shutdown: {e}")
+
+class RosNode(Node):
+    """ROS2 Node that handles all ROS2 operations"""
 
     def __init__(self):
         super().__init__('tkinter_publisher')
@@ -352,9 +441,6 @@ class TkinterPublisher(Node):
         # LED state tracking
         self.led_state = False
 
-        # Tkinter GUI
-        self.gui = TkinterGUI(self)
-
         print("=" * 60)
         print("ROS2 Tkinter Publisher Started")
         print("=" * 60)
@@ -368,19 +454,45 @@ class TkinterPublisher(Node):
 
     def timer_callback(self):
         """Timer callback for publishing movement updates"""
-        # Publish twist message if key state changed
-        twist_msg = self.key_manager.get_twist_if_changed()
-        if twist_msg is not None:
-            self.twist_publisher.publish(twist_msg)
-            self.get_logger().info('.2f')
+        try:
+            # Publish twist message if key state changed
+            twist_msg = self.key_manager.get_twist_if_changed()
+            if twist_msg is not None:
+                self.twist_publisher.publish(twist_msg)
+                self.get_logger().info('.2f')
 
-        # Publish servo position if it changed
-        servo_position = self.key_manager.get_servo_if_changed()
-        if servo_position is not None:
-            servo_msg = Int32()
-            servo_msg.data = servo_position
-            self.servo_publisher.publish(servo_msg)
-            self.get_logger().info(f'Publishing servo_position: {servo_position}')
+            # Publish servo position if it changed
+            servo_position = self.key_manager.get_servo_if_changed()
+            if servo_position is not None:
+                servo_msg = Int32()
+                servo_msg.data = servo_position
+                self.servo_publisher.publish(servo_msg)
+                self.get_logger().info(f'Publishing servo_position: {servo_position}')
+        except Exception as e:
+            self.get_logger().error(f'Error in timer callback: {e}')
+
+    def publish_twist(self, linear_x, linear_y, linear_z, angular_x, angular_y, angular_z):
+        """Publish twist message"""
+        try:
+            msg = Twist()
+            msg.linear.x = linear_x
+            msg.linear.y = linear_y
+            msg.linear.z = linear_z
+            msg.angular.x = angular_x
+            msg.angular.y = angular_y
+            msg.angular.z = angular_z
+            self.twist_publisher.publish(msg)
+        except Exception as e:
+            self.get_logger().error(f'Error publishing Twist message: {e}')
+
+    def publish_servo(self, position):
+        """Publish servo position"""
+        try:
+            msg = Int32()
+            msg.data = int(position)
+            self.servo_publisher.publish(msg)
+        except Exception as e:
+            self.get_logger().error(f'Error publishing servo message: {e}')
 
     def publish_motor_speed(self, speed):
         """Publish motor speed"""
@@ -400,7 +512,7 @@ class TkinterPublisher(Node):
             self.servo_speed_publisher.publish(msg)
             self.get_logger().info(f'Publishing servo_speed: {speed}')
         except Exception as e:
-            self.get_logger().error(f'Error publishing servo speed: {e}')
+            self.get_logger().error(f'Error publishing servo speed message: {e}')
 
     def publish_led_toggle(self, state):
         """Publish LED toggle"""
@@ -410,41 +522,34 @@ class TkinterPublisher(Node):
             self.led_publisher.publish(msg)
             self.get_logger().info(f'Publishing LED toggle: {state}')
         except Exception as e:
-            self.get_logger().error(f'Error publishing LED toggle: {e}')
+            self.get_logger().error(f'Error publishing LED toggle message: {e}')
 
     def led_status_callback(self, msg):
         """Callback for LED status updates"""
         self.led_state = msg.data
         self.get_logger().info(f'Received LED status: {self.led_state}')
 
-    def run_gui(self):
-        """Run the Tkinter GUI in a separate thread"""
-        self.gui.run()
+    def update_key_state(self, key_code, is_pressed):
+        """Update key state from GUI thread"""
+        self.key_manager.update_key(key_code, is_pressed)
 
 def main(args=None):
-    global minimal_publisher
-
+    """Main function - Tkinter runs in main thread, ROS2 in background thread"""
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Bocchi Robot Controller - Tkinter GUI')
     parsed_args, ros_args = parser.parse_known_args(args if args else sys.argv[1:])
 
     try:
-        rclpy.init(args=ros_args)
         signal.signal(signal.SIGINT, signal_handler)
 
-        minimal_publisher = TkinterPublisher()
+        # Create the Tkinter publisher (this starts ROS2 in background thread)
+        publisher = TkinterPublisher()
 
-        # Start GUI in a separate thread
-        gui_thread = threading.Thread(target=minimal_publisher.run_gui, daemon=True)
-        gui_thread.start()
+        print("Starting Tkinter GUI main loop...")
+        print("Close the Tkinter window to exit")
 
-        # Give GUI time to initialize
-        time.sleep(1)
-
-        print("Starting ROS2 node spin...")
-        print("Close the Tkinter window or press Ctrl+C to exit")
-
-        rclpy.spin(minimal_publisher)
+        # Run Tkinter main loop (this blocks until window is closed)
+        publisher.run_gui()
 
     except KeyboardInterrupt:
         print("\nShutdown requested by user")
@@ -453,14 +558,10 @@ def main(args=None):
         import traceback
         traceback.print_exc()
     finally:
-        # Destroy the node explicitly
-        if minimal_publisher:
-            minimal_publisher.destroy_node()
-        try:
-            rclpy.shutdown()
-        except Exception as e:
-            print(f"Error during shutdown: {e}")
-        print("ROS2 node shutdown complete")
+        # Shutdown
+        if 'publisher' in locals():
+            publisher.shutdown()
+        print("Application shutdown complete")
 
 if __name__ == '__main__':
     main()
