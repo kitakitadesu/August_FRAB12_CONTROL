@@ -30,7 +30,8 @@ setup(
         'websockets==11.0.3',
         'requests==2.31.0',
         'sseclient-py==1.8.0',
-        'Mako==1.2.4'
+        'Mako==1.2.4',
+        'wxPython==4.2.1'
     ],
     zip_safe=True,
     maintainer='kitakitadesu',
@@ -42,6 +43,7 @@ setup(
     entry_points={
         'console_scripts': [
             'publisher = bocchi.publisher:main',
+            'publisher_wx = bocchi.publisher_wx:main',
             'subscriber = bocchi.subscriber:main'
         ],
     },
