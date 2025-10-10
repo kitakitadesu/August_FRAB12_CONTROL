@@ -42,7 +42,8 @@ setup(
     entry_points={
         'console_scripts': [
             'publisher = bocchi.publisher:main',
-            'subscriber = bocchi.subscriber:main'
+            'subscriber = bocchi.subscriber:main',
+            'tkinter_publisher = bocchi.tkinter_publisher:main'
         ],
     },
 )
