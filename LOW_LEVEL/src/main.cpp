@@ -129,8 +129,5 @@ void loop() {
   encoderM3.updateSpeedControl();
   encoderM4.updateSpeedControl();
 
-  // Update servo position
-  servo1.update();
-
   digitalWrite(LED_BUILTIN, toggle_led_subscriber.isLedEnabled());
 }

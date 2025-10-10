@@ -26,9 +26,7 @@ private:
 
     static ServoCommandSubscriber* _instance;
     static void subscription_callback(const void* msgin);
-    static void speed_subscription_callback(const void* msgin);
     void handleServoCommand(const std_msgs__msg__Int32* msg);
-    void handleServoSpeed(const std_msgs__msg__Float32* msg);
 };
 
 #endif
