@@ -134,6 +134,12 @@ class TkinterGUI:
         # Key state tracking
         self.pressed_keys = set()
 
+        # Status variables (initialize before setup_gui)
+        self.led_state = tk.BooleanVar(value=False)
+        self.servo_position = tk.IntVar(value=0)
+        self.motor_speed = tk.DoubleVar(value=1000.0)
+        self.servo_speed = tk.DoubleVar(value=90.0)
+
         # Setup GUI components
         self.setup_gui()
 
@@ -143,12 +149,6 @@ class TkinterGUI:
 
         # Focus on root to capture keyboard events
         self.root.focus_set()
-
-        # Status variables
-        self.led_state = tk.BooleanVar(value=False)
-        self.servo_position = tk.IntVar(value=0)
-        self.motor_speed = tk.DoubleVar(value=1000.0)
-        self.servo_speed = tk.DoubleVar(value=90.0)
 
         # Update status periodically
         self.update_status()
